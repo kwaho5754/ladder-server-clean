@@ -84,7 +84,7 @@ def predict():
             return jsonify({"error": "데이터가 부족합니다"})
 
         # 진행 중인 마지막 줄은 제외하고 최근 확정 회차 기준으로 +1
-        last_round = int(raw_data[-3]["date_round"])
+        last_round = int(raw_data[-1]["date_round"])
         predict_round = last_round + 1
 
         recent = raw_data[-288:]
