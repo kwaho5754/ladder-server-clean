@@ -80,12 +80,11 @@ def predict():
         if not isinstance(raw_data, list):
             return jsonify({"error": "Invalid data format"})
 
-        # 최근 확정된 회차를 기준으로 예측 회차 계산
-        confirmed = [entry for entry in raw_data if entry.get("result")]
-        if not confirmed:
-            return jsonify({"error": "확정된 회차 정보가 없습니다"})
+        if len(raw_data) < 3:
+            return jsonify({"error": "데이터가 부족합니다"})
 
-        last_round = int(confirmed[-1]["date_round"])
+        # 진행 중인 마지막 줄은 제외하고 최근 확정 회차 기준으로 +1
+        last_round = int(raw_data[-2]["date_round"])
         predict_round = last_round + 1
 
         recent = raw_data[-288:]
@@ -93,7 +92,10 @@ def predict():
         predictions = find_predictions(recent, blocks)
 
         filtered = [p for p in predictions if p != "❌ 없음"]
-        top3 = [item for item, _ in Counter(filtered).most_common(3)]
+        if filtered:
+            top3 = [item for item, _ in Counter(filtered).most_common(3)]
+        else:
+            top3 = ["❌ 없음", "❌ 없음", "❌ 없음"]
 
         while len(top3) < 3:
             top3.append("❌ 없음")
