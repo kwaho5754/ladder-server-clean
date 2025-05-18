@@ -1,4 +1,3 @@
-# ✅ 사다리 예측 시스템 - 블럭 고정 매칭 완전 수정본
 from flask import Flask, jsonify
 from flask_cors import CORS
 import requests
@@ -7,66 +6,90 @@ import os
 app = Flask(__name__)
 CORS(app)
 
+# 블럭 생성 함수
+def create_blocks(data, direction):
+    blocks = []
+    max_block_size = 6
+    min_block_size = 2
+    length = len(data)
+
+    if direction == "front":
+        for size in range(min_block_size, max_block_size + 1):
+            block = data[-size:]
+            blocks.append(("".join(block), size))
+    elif direction == "back":
+        for size in range(min_block_size, max_block_size + 1):
+            block = [entry[-1] for entry in data[-size:]]
+            blocks.append(("".join(block), size))
+    return blocks
+
+# 예측 함수
+def predict_ladder():
+    try:
+        url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
+        response = requests.get(url)
+        raw_data = response.json()["rows"]
+
+        if len(raw_data) < 288:
+            return {"error": "데이터 부족"}
+
+        data = [f"{row['start_point'][0]}{row['line_count']}{'짝' if row['odd_even'] == 'EVEN' else '홀'}" for row in raw_data]
+        round_number = int(raw_data[0]["date_round"]) + 1
+
+        candidates_front = []
+        candidates_back = []
+
+        for size in range(2, 7):
+            target_block = data[-size:]
+            target_name = "".join(target_block)
+
+            # 앞 기준
+            for i in range(len(data) - size):
+                block = data[i:i+size]
+                if "".join(block) == target_name and i > 0:
+                    candidates_front.append(data[i-1])
+
+            # 뒤 기준
+            target_block_back = [d[-1] for d in data[-size:]]
+            target_name_back = "".join(target_block_back)
+            for i in range(len(data) - size):
+                block = [d[-1] for d in data[i:i+size]]
+                if "".join(block) == target_name_back and i > 0:
+                    candidates_back.append(data[i-1])
+
+            if len(candidates_front) >= 5 and len(candidates_back) >= 5:
+                break
+
+        def finalize_predictions(candidates):
+            result = []
+            for c in candidates:
+                if c not in result:
+                    result.append(c)
+                if len(result) >= 5:
+                    break
+            while len(result) < 5:
+                result.append("❌ 없음")
+            return result
+
+        front_result = finalize_predictions(candidates_front)
+        back_result = finalize_predictions(candidates_back)
+
+        return {
+            "예측회차": round_number,
+            "앞기준 예측값": front_result,
+            "뒤기준 예측값": back_result
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.route("/ping")
 def ping():
     return "pong"
 
 @app.route("/predict")
 def predict():
-    try:
-        # ✅ 최신 288줄 데이터 수집
-        url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
-        response = requests.get(url)
-        raw_data = response.json()["rows"]
-        data = [f"{row['start_point'][-1]}{row['line_count']}{'홀' if row['odd_even'] == 'ODD' else '짝'}" for row in raw_data]
-        recent_round = int(raw_data[0]["date_round"]) + 1  # 예측 회차 +1
-
-        # ✅ 블럭 생성 (2~6줄 고정, 앞/뒤 방향)
-        def make_blocks(data, direction="front"):
-            blocks = []
-            for size in range(2, 7):
-                if direction == "front":
-                    block = data[:size]
-                else:
-                    block = list(reversed(data[-size:]))
-                blocks.append("".join(block))
-            return blocks
-
-        # ✅ 블럭 이름을 전체 데이터에서 찾아 위쪽 값을 예측값으로 사용
-        def find_predictions(blocks, full_data, direction="front"):
-            results = []
-            for blk in blocks:
-                found = False
-                for i in range(6, len(full_data)):
-                    for size in range(2, 7):
-                        if direction == "front":
-                            sample = full_data[i:i+size]
-                        else:
-                            sample = list(reversed(full_data[i-size+1:i+1]))
-                        if len(sample) != len(blk):
-                            continue
-                        if "".join(sample) == blk:
-                            results.append(full_data[i-1] if i > 0 else "❌ 없음")
-                            found = True
-                            break
-                    if found:
-                        break
-                if not found:
-                    results.append("❌ 없음")
-            return results[:5]
-
-        front_blocks = make_blocks(data, direction="front")
-        back_blocks = make_blocks(data, direction="back")
-        front_preds = find_predictions(front_blocks, data, direction="front")
-        back_preds = find_predictions(back_blocks, data, direction="back")
-
-        return jsonify({
-            "예측회차": recent_round,
-            "앞기준 예측값": front_preds,
-            "뒤기준 예측값": back_preds
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    return jsonify(predict_ladder())
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
