@@ -19,10 +19,9 @@ def predict():
         response = requests.get(url)
         raw_data = response.json()["rows"]
         data = [f"{row['start_point'][-1]}{row['line_count']}{'홀' if row['odd_even'] == 'ODD' else '짝'}" for row in raw_data]
-        recent_round = int(raw_data[0]["date_round"]) + 1  # 회차 +1
+        recent_round = int(raw_data[0]["date_round"]) + 1  # 예측 회차 +1
 
         def make_blocks(data, direction="front"):
-            """2~6줄 고정 블럭 생성"""
             blocks = []
             for size in range(2, 7):
                 if direction == "front":
@@ -33,17 +32,19 @@ def predict():
             return blocks
 
         def find_predictions(blocks, full_data):
-            """블럭 매칭 결과값 상단 추출"""
             results = []
             for blk in blocks:
                 found = False
-                for i in range(6, len(full_data)):
+                for i in range(0, len(full_data) - 6):
                     for size in range(2, 7):
                         sample = full_data[i:i+size]
                         if len(sample) != len(blk):
                             continue
                         if "".join(sample) == blk:
-                            results.append(full_data[i-1])
+                            if i > 0:
+                                results.append(full_data[i-1])
+                            else:
+                                results.append("❌ 없음")
                             found = True
                             break
                     if found:
@@ -52,7 +53,6 @@ def predict():
                     results.append("❌ 없음")
             return results[:5]
 
-        # ✅ 앞/뒤 블럭 생성 → 각각 예측
         front_blocks = make_blocks(data, direction="front")
         back_blocks = make_blocks(data, direction="back")
         front_preds = find_predictions(front_blocks, data)
