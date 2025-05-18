@@ -32,7 +32,7 @@ def predict():
         res = requests.get(url, headers=headers)
         res.raise_for_status()
         data = res.json()
-        results = [row['result'] for row in data['rows']]
+        results = [row['result'] for row in data]  # 수정됨
     except Exception as e:
         return jsonify({"error": str(e)})
 
