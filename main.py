@@ -91,7 +91,7 @@ def predict():
             top3.append("❌ 없음")
 
         return jsonify({
-            "예측회차": int(raw_data[-1]["date_round"]),
+            "예측회차": int(raw_data[-1]["date_round"]) + 1,
             "예측값 Top3": top3
         })
 
