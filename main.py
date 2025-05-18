@@ -1,4 +1,4 @@
-# ✅ 사다리 예측 시스템 - main.py (정방향/역방향 블럭 기반 예측)
+# ✅ 사다리 예측 시스템 - 정방향/역방향 블럭 기반 예측 정식 구현
 from flask import Flask, jsonify
 from flask_cors import CORS
 import requests
@@ -14,43 +14,44 @@ def ping():
 @app.route("/predict")
 def predict():
     try:
-        # ✅ 데이터 불러오기
+        # 1. 데이터 불러오기
         url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
         response = requests.get(url)
         raw_data = response.json()["rows"]
-        data = [f"{row['start_point'][-1]}{row['line_count']}{'홀' if row['odd_even'] == 'ODD' else '짝'}" for row in raw_data]
 
-        def make_blocks(data, is_reverse=False):
-            """2~6줄 고정 블럭 생성"""
+        # 2. 예측 회차
+        latest_round = int(raw_data[0]["date_round"]) + 1
+
+        # 3. 변환: 좌/우 + 숫자 + 홀짝 → 문자열 블럭화
+        def convert(row):
+            lr = "좌" if row["start_point"] == "LEFT" else "우"
+            oe = "홀" if row["odd_even"] == "ODD" else "짝"
+            return f"{lr}{row['line_count']}{oe}"
+
+        recent_data = [convert(r) for r in raw_data][:288]
+
+        # 4. 블럭 생성 함수
+        def make_blocks(data, direction="front"):
             blocks = []
-            direction = "뒤" if is_reverse else "앞"
-            length = len(data)
-
-            for size in range(2, 7):  # 2~6줄
-                for i in range(length - size + 1):
-                    idx = length - i - size
-                    block = data[idx:idx+size] if not is_reverse else [s[::-1] for s in data[idx:idx+size]]
-                    blocks.append(("".join(block), idx))  # (블럭명, 시작위치)
+            for size in range(2, 7):
+                if direction == "front":
+                    block = data[:size]
+                else:
+                    block = data[-size:]
+                blocks.append("".join(block))
             return blocks
 
-        def find_predictions(current_blocks, all_data):
-            """블럭 매칭하여 상단 결과 추출"""
+        # 5. 블럭 매칭
+        def match_block(blocks, full_data):
             predictions = []
-            seen_blocks = set()
-
-            for blk_name, idx in current_blocks:
-                if blk_name in seen_blocks:
-                    continue
-                seen_blocks.add(blk_name)
-                for past_i in range(len(all_data) - len(blk_name)):
+            for blk in blocks:
+                for i in range(288, len(full_data)):
                     for size in range(2, 7):
-                        if past_i + size >= len(all_data):
-                            continue
-                        candidate = all_data[past_i:past_i+size]
-                        candidate_name = "".join(candidate)
-                        if candidate_name == blk_name:
-                            if past_i > 0:
-                                predictions.append(all_data[past_i - 1])
+                        candidate = [convert(full_data[j]) for j in range(i, i + size) if j < len(full_data)]
+                        if "".join(candidate) == blk:
+                            if i > 0:
+                                pred = convert(full_data[i - 1])
+                                predictions.append(pred)
                             else:
                                 predictions.append("❌ 없음")
                             break
@@ -58,25 +59,18 @@ def predict():
                         break
                 if len(predictions) >= 5:
                     break
-
             while len(predictions) < 5:
                 predictions.append("❌ 없음")
             return predictions
 
-        # ✅ 앞/뒤 블럭 생성
-        recent_data = data[:288]
-        front_blocks = make_blocks(recent_data, is_reverse=False)
-        back_blocks = make_blocks(recent_data, is_reverse=True)
-
-        # ✅ 예측값 계산
-        front_preds = find_predictions(front_blocks, recent_data)
-        back_preds = find_predictions(back_blocks, recent_data)
-
-        # ✅ 예측 회차는 가장 최신 회차 + 1
-        last_round = int(raw_data[0]["date_round"]) + 1
+        # 6. 최종 실행
+        front_blocks = make_blocks(recent_data, direction="front")
+        back_blocks = make_blocks(recent_data, direction="back")
+        front_preds = match_block(front_blocks, raw_data)
+        back_preds = match_block(back_blocks, raw_data)
 
         return jsonify({
-            "예측회차": last_round,
+            "예측회차": latest_round,
             "앞기준 예측값": front_preds,
             "뒤기준 예측값": back_preds
         })
