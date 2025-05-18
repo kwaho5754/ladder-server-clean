@@ -13,7 +13,7 @@ def ping():
 @app.route("/predict")
 def predict():
     try:
-        # 최신 288줄 데이터 가져오기
+        # 최신 288줄 데이터 수집
         url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
         response = requests.get(url)
         data = response.json()
@@ -22,70 +22,51 @@ def predict():
         def make_block_name(block):
             return "-".join(block)
 
-        def find_matches(direction):
-            predictions = []
-            searched = set()
-            recent_range = range(2, 7)  # 2~6줄 블럭
-            for size in recent_range:
+        def find_top_matches(direction):
+            results = []
+            for size in range(2, 7):  # 2~6줄 블럭
                 if direction == "front":
                     target_block = recent_results[:size]
-                    past_range = range(size, len(recent_results))
                 else:  # "back"
                     target_block = list(reversed(recent_results[:size]))
-                    past_range = range(size, len(recent_results))
-
                 target_name = make_block_name(target_block)
 
-                for i in past_range:
+                for i in range(size, len(recent_results)):
                     if i + size > len(recent_results):
                         continue
                     if direction == "front":
                         past_block = recent_results[i:i+size]
                     else:
                         past_block = list(reversed(recent_results[i:i+size]))
-
                     past_name = make_block_name(past_block)
                     if past_name == target_name:
                         upper_index = i - 1
                         if upper_index >= 0:
-                            result = recent_results[upper_index]
-                            predictions.append(result)
+                            results.append(recent_results[upper_index])
                         else:
-                            predictions.append("❌ 없음")
+                            results.append("❌ 없음")
                         break
-
-                if len(predictions) > 0:
+                if results:
                     break
+            if not results:
+                results.append("❌ 없음")
+            return results[0]
 
-            if len(predictions) == 0:
-                predictions.append("❌ 없음")
-            return predictions
+        # 앞/뒤 기준 예측값 각각 5개 확보
+        front_preds, back_preds = [], []
 
-        # 앞/뒤 기준 각각 5개 예측값 확보
-        front_preds = []
-        back_preds = []
+        for _ in range(5):
+            result = find_top_matches("front")
+            front_preds.append(result)
 
-        while len(front_preds) < 5:
-            result = find_matches("front")
-            front_preds.extend(result)
-            if result == ["❌ 없음"]:
-                break
-
-        while len(back_preds) < 5:
-            result = find_matches("back")
-            back_preds.extend(result)
-            if result == ["❌ 없음"]:
-                break
-
-        while len(front_preds) < 5:
-            front_preds.append("❌ 없음")
-        while len(back_preds) < 5:
-            back_preds.append("❌ 없음")
+        for _ in range(5):
+            result = find_top_matches("back")
+            back_preds.append(result)
 
         return jsonify({
             "예측회차": 288 + 1,
-            "앞기준 예측값": front_preds[:5],
-            "뒤기준 예측값": back_preds[:5]
+            "앞기준 예측값": front_preds,
+            "뒤기준 예측값": back_preds
         })
 
     except Exception as e:
