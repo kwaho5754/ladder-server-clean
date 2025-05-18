@@ -1,9 +1,11 @@
 from flask import Flask, jsonify, send_from_directory
+from flask_cors import CORS
 import requests
 from collections import Counter
 import os
 
 app = Flask(__name__)
+CORS(app)  # GitHub Pages에서 접근 허용
 
 # 대칭 및 유사 대칭 정의 (좌우, 홀짝 기준)
 mirror_map = {
@@ -27,7 +29,6 @@ def root():
 
 @app.route('/predict')
 def predict():
-    # 최신 288개 결과 불러오기
     url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
     try:
         res = requests.get(url)
