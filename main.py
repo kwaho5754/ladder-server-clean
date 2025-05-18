@@ -60,8 +60,8 @@ def find_predictions(data, blocks):
                         predictions.append(convert(data[i + size]))  # 하단
                     break
             else:
-                predictions.append("❌ 없음")  # 상단 없음
-                predictions.append("❌ 없음")  # 하단 없음
+                predictions.append("❌ 없음")
+                predictions.append("❌ 없음")
 
     return predictions
 
@@ -92,7 +92,7 @@ def predict():
 
         return jsonify({
             "예측회차": int(raw_data[-1]["date_round"]),
-            "Top3 예측값": top3
+            "예측값 Top3": top3
         })
 
     except Exception as e:
