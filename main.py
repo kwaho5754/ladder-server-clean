@@ -82,7 +82,7 @@ def predict():
             top3 = [item[0] for item in Counter(filtered).most_common(3)]
             top3 += ["❌ 없음"] * (3 - len(top3))
 
-        return jsonify({"예측 회차": predict_round, "Top3": top3})
+        return jsonify({"round": predict_round, "top3": top3})
 
     except Exception as e:
         return jsonify({"error": str(e)})
