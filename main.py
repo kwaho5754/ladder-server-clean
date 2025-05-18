@@ -32,7 +32,8 @@ def predict():
         res = requests.get(url, headers=headers)
         res.raise_for_status()
         data = res.json()
-        results = [row['result'] for row in data]  # 수정됨
+        # 안전하게 'result' 필드 추출
+        results = [row.get('result') for row in data if row.get('result')]
     except Exception as e:
         return jsonify({"error": str(e)})
 
