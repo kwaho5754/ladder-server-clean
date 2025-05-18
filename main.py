@@ -6,75 +6,70 @@ import os
 app = Flask(__name__)
 CORS(app)
 
+# 🔧 블럭 생성 함수
+def create_block(lines):
+    return ",".join([f"{line['start_point']}{line['line_count']}{line['odd_even']}" for line in lines])
+
+# 🔍 블럭 매칭 함수
+def find_prediction_blocks(direction):
+    try:
+        url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
+        res = requests.get(url)
+        data = res.json()
+
+        recent_results = data[-288:]  # 분석 범위: 최근 288줄
+        predictions = []
+
+        for size in range(2, 7):
+            if direction == "front":
+                target_block = recent_results[:size]  # 앞 기준: 위에서부터 size개
+            else:
+                target_block = recent_results[-size:]  # 뒤 기준: 아래서부터 size개
+
+            target_block_str = create_block(target_block)
+
+            for i in range(size, len(recent_results)):
+                if direction == "front":
+                    past_block = recent_results[i:i+size]
+                    if i + size >= len(recent_results):
+                        break
+                    upper_line = recent_results[i - 1]  # 매칭된 블럭 위쪽 줄
+                else:
+                    past_block = recent_results[i:i+size]
+                    if i + size >= len(recent_results):
+                        break
+                    upper_line = recent_results[i - 1]  # 동일하게 상단값
+
+                if create_block(past_block) == target_block_str:
+                    predictions.append(f"{upper_line['start_point']}{upper_line['line_count']}{upper_line['odd_even']}")
+                    break
+            else:
+                predictions.append("❌ 없음")
+
+        return predictions[:5]
+
+    except Exception as e:
+        return ["❌ 오류"]
+
+# ✅ /ping
 @app.route("/ping")
 def ping():
     return "pong"
 
+# ✅ /predict
 @app.route("/predict")
 def predict():
-    try:
-        # 최신 288줄 데이터 가져오기
-        url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
-        response = requests.get(url)
-        data = response.json()[:288]
+    front_result = find_prediction_blocks("front")
+    back_result = find_prediction_blocks("back")
+    round_number = 288 - 120  # 예시 회차
 
-        def convert(row):
-            lr = '좌' if row['start_point'] == 'LEFT' else '우'
-            odd = '홀' if row['odd_even'] == 'ODD' else '짝'
-            return f"{lr}{row['line_count']}{odd}"
+    return jsonify({
+        "예측회차": round_number,
+        "앞 기준 예측값": front_result,
+        "뒤 기준 예측값": back_result
+    })
 
-        recent_results = [convert(row) for row in data]
-
-        def make_block_name(block):
-            return "-".join(block)
-
-        def find_prediction_blocks(direction):
-            results = []
-            for size in range(2, 7):
-                if direction == "front":
-                    target_block = recent_results[:size]
-                else:  # back
-                    target_block = list(reversed(recent_results[:size]))
-
-                target_name = make_block_name(target_block)
-
-                for i in range(size, len(recent_results)):
-                    if i + size > len(recent_results):
-                        continue
-
-                    if direction == "front":
-                        past_block = recent_results[i:i+size]
-                    else:
-                        past_block = list(reversed(recent_results[i:i+size]))
-
-                    if make_block_name(past_block) == target_name:
-                        upper_index = i - 1
-                        if upper_index >= 0:
-                            results.append(recent_results[upper_index])
-                        else:
-                            results.append("❌ 없음")
-                        break
-
-                if len(results) >= 5:
-                    break
-
-            while len(results) < 5:
-                results.append("❌ 없음")
-
-            return results[:5]
-
-        front_preds = find_prediction_blocks("front")
-        back_preds = find_prediction_blocks("back")
-
-        return jsonify({
-            "예측회차": data[0].get("date_round", "없음"),
-            "앞기준 예측값": front_preds,
-            "뒤기준 예측값": back_preds
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)})
-
-if __name__ == '__main__':
+# 🚀 서버 실행
+if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host="0.0.0.0", port=port)
