@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, send_from_directory
 import requests
 from collections import Counter
+import os
 
 app = Flask(__name__)
 
@@ -35,7 +36,6 @@ def predict():
     except:
         return jsonify({"error": "데이터 불러오기 실패"})
 
-    # 블럭 길이 범위: 2~5줄
     block_lengths = [2, 3, 4, 5]
     total_blocks = []
 
@@ -48,7 +48,6 @@ def predict():
 
     prediction_candidates = []
 
-    # 전체 구간에서 대칭 블럭 매칭
     for blk in total_blocks:
         blk_str = block_to_str(blk)
         for i in range(len(results) - len(blk) - 1):
@@ -59,7 +58,7 @@ def predict():
                 lower = results[i+len(blk)] if (i + len(blk)) < len(results) else None
                 if upper: prediction_candidates.append(upper)
                 if lower: prediction_candidates.append(lower)
-                break  # 하나만 찾고 탈출
+                break
 
     if not prediction_candidates:
         top3 = ['❌ 없음'] * 3
@@ -74,6 +73,5 @@ def predict():
     })
 
 if __name__ == '__main__':
-    import os
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
