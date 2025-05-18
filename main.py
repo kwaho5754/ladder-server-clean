@@ -1,4 +1,3 @@
-# ✅ 코드복사 버튼 누르기 쉽게 상단 고정
 from flask import Flask, jsonify
 from flask_cors import CORS
 import requests
@@ -12,39 +11,43 @@ def predict():
     try:
         url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
         response = requests.get(url)
-        raw_data = response.json()["rows"]
-        if not raw_data or len(raw_data) < 10:
-            return jsonify({"error": "데이터 부족"})
+        data = response.json()
 
-        # 🔽 데이터 변환 (가장 오래된 게 앞쪽)
-        data = [
-            f"{row['start_point']}{row['line_count']}{row['odd_even']}"
-            for row in reversed(raw_data)
+        rows = [
+            f"{item['start_point'][0]}{item['line_count']}{item['odd_even'][0]}"
+            for item in data
         ]
-        current_round = int(raw_data[0]["date_round"]) + 1
 
-        predictions = []
+        rows.reverse()
+        latest_index = len(rows) - 1
+        all_blocks = {}
+        prediction = []
 
-        # 🔁 블럭 크기 2~6줄 시도
-        for size in range(2, 7):
-            target_block = data[-size:]  # 최신 블럭
-            found = False
+        print(f"[디버그] 총 줄 수: {len(rows)}")
 
-            # 🔁 과거에서 일치하는 블럭 찾기
-            for i in range(len(data) - size - 1, 0, -1):  # -1은 result 때문에
-                compare_block = data[i:i+size]
-                if compare_block == target_block:
-                    result = data[i - 1] if i - 1 >= 0 else "❌ 없음"
-                    predictions.append(result)
-                    found = True
-                    break
+        for block_size in range(2, 7):
+            recent_block = ''.join(rows[-block_size:])
+            print(f"[디버그] 최근 블럭({block_size}줄): {recent_block}")
 
-            if not found:
-                predictions.append("❌ 없음")
+            for i in range(0, len(rows) - block_size):
+                block = ''.join(rows[i:i + block_size])
+                if block == recent_block:
+                    if i > 0:
+                        result = rows[i - 1]
+                        prediction.append(result)
+                        print(f"[매칭] {block_size}줄 블럭 일치 → 예측값: {result}")
+                        break
+                    else:
+                        print(f"[주의] 블럭은 일치했으나 상단 결과 없음")
+            if len(prediction) >= 5:
+                break
+
+        while len(prediction) < 5:
+            prediction.append("❌ 없음")
 
         return jsonify({
-            "예측회차": current_round,
-            "앞기준 예측값": predictions[:5]  # 총 5개만 출력
+            "예측회차": latest_index + 1,
+            "앞기준 예측값": prediction[:5]
         })
 
     except Exception as e:
