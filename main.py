@@ -80,6 +80,11 @@ def predict():
         if not isinstance(raw_data, list):
             return jsonify({"error": "Invalid data format"})
 
+        # 최근 확정된 회차를 기준으로 예측 회차 계산
+        confirmed = [entry for entry in raw_data if entry.get("result")]
+        last_round = int(confirmed[-1]["date_round"])
+        predict_round = last_round + 1
+
         recent = raw_data[-288:]
         blocks = generate_blocks(recent)
         predictions = find_predictions(recent, blocks)
@@ -91,7 +96,7 @@ def predict():
             top3.append("❌ 없음")
 
         return jsonify({
-            "예측회차": int(raw_data[-1]["date_round"]) + 1,
+            "예측회차": predict_round,
             "예측값 Top3": top3
         })
 
