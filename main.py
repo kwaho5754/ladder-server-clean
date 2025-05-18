@@ -6,14 +6,14 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# 🔧 블럭 문자열 변환 함수 (예: 좌4짝 → L4E)
+# 블럭 변환 함수
 def convert(entry):
     start = 'L' if entry['start_point'] == 'LEFT' else 'R'
     count = str(entry['line_count'])
     oe = 'E' if entry['odd_even'] == 'EVEN' else 'O'
     return f"{start}{count}{oe}"
 
-# 🔧 블럭 문자열 → 한글 변환 함수
+# 한글 변환 함수
 def to_korean(block_code):
     if block_code == "❌ 없음":
         return "❌ 없음"
@@ -22,7 +22,7 @@ def to_korean(block_code):
     oe = "짝" if block_code[2] == "E" else "홀"
     return f"{start}{count}{oe}"
 
-# 🔍 앞 기준 예측 함수
+# 앞 기준 예측 함수
 def predict_forward(data):
     recent = data[-288:]
     total = len(recent)
@@ -49,7 +49,7 @@ def predict_forward(data):
 
     return predictions[:5]
 
-# 📡 API
+# API 엔드포인트
 @app.route("/predict", methods=["GET"])
 def predict():
     try:
@@ -61,7 +61,7 @@ def predict():
             return jsonify({"error": "Invalid data format"})
 
         predictions = predict_forward(raw_data)
-       round_number = int(raw_data[0]["date_round"]) + 1
+        round_number = int(raw_data[0]["date_round"]) + 1
 
         return jsonify({
             "예측회차": round_number,
@@ -71,7 +71,7 @@ def predict():
     except Exception as e:
         return jsonify({"error": str(e)})
 
-# 🟢 실행
+# 서버 실행
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
