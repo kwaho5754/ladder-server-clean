@@ -1,3 +1,4 @@
+# ✅ 코드복사 버튼 누르기 쉽게 상단 고정
 from flask import Flask, jsonify
 from flask_cors import CORS
 import requests
@@ -6,56 +7,48 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-def predict_ladder():
+@app.route("/predict")
+def predict():
     try:
         url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
         response = requests.get(url)
         raw_data = response.json()["rows"]
+        if not raw_data or len(raw_data) < 10:
+            return jsonify({"error": "데이터 부족"})
 
-        if len(raw_data) < 288:
-            return {"error": "데이터 부족"}
+        # 🔽 데이터 변환 (가장 오래된 게 앞쪽)
+        data = [
+            f"{row['start_point']}{row['line_count']}{row['odd_even']}"
+            for row in reversed(raw_data)
+        ]
+        current_round = int(raw_data[0]["date_round"]) + 1
 
-        # 좌우 + 줄수 + 홀짝 문자열로 변환
-        data = [f"{row['start_point'][0]}{row['line_count']}{'짝' if row['odd_even'] == 'EVEN' else '홀'}" for row in raw_data]
-        round_number = int(raw_data[0]["date_round"]) + 1
+        predictions = []
 
-        candidates = []
+        # 🔁 블럭 크기 2~6줄 시도
         for size in range(2, 7):
-            target_block = data[-size:]
-            target_name = "".join(target_block)
+            target_block = data[-size:]  # 최신 블럭
+            found = False
 
-            for i in range(len(data) - size):
-                block = data[i:i+size]
-                if "".join(block) == target_name and i > 0:
-                    candidates.append(data[i - 1])
+            # 🔁 과거에서 일치하는 블럭 찾기
+            for i in range(len(data) - size - 1, 0, -1):  # -1은 result 때문에
+                compare_block = data[i:i+size]
+                if compare_block == target_block:
+                    result = data[i - 1] if i - 1 >= 0 else "❌ 없음"
+                    predictions.append(result)
+                    found = True
+                    break
 
-            if len(candidates) >= 5:
-                break
+            if not found:
+                predictions.append("❌ 없음")
 
-        result = []
-        for c in candidates:
-            if c not in result:
-                result.append(c)
-            if len(result) >= 5:
-                break
-        while len(result) < 5:
-            result.append("❌ 없음")
-
-        return {
-            "예측회차": round_number,
-            "앞기준 예측값": result
-        }
+        return jsonify({
+            "예측회차": current_round,
+            "앞기준 예측값": predictions[:5]  # 총 5개만 출력
+        })
 
     except Exception as e:
-        return {"error": str(e)}
-
-@app.route("/ping")
-def ping():
-    return "pong"
-
-@app.route("/predict")
-def predict():
-    return jsonify(predict_ladder())
+        return jsonify({"error": str(e)})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
