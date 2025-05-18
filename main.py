@@ -1,4 +1,4 @@
-# ✅ 사다리 예측 시스템 - 완전 수정본 (앞/뒤 블럭 분리)
+# ✅ 사다리 예측 시스템 - 블럭 고정 매칭 완전 수정본
 from flask import Flask, jsonify
 from flask_cors import CORS
 import requests
@@ -21,6 +21,7 @@ def predict():
         data = [f"{row['start_point'][-1]}{row['line_count']}{'홀' if row['odd_even'] == 'ODD' else '짝'}" for row in raw_data]
         recent_round = int(raw_data[0]["date_round"]) + 1  # 예측 회차 +1
 
+        # ✅ 블럭 생성 (2~6줄 고정, 앞/뒤 방향)
         def make_blocks(data, direction="front"):
             blocks = []
             for size in range(2, 7):
@@ -31,20 +32,21 @@ def predict():
                 blocks.append("".join(block))
             return blocks
 
-        def find_predictions(blocks, full_data):
+        # ✅ 블럭 이름을 전체 데이터에서 찾아 위쪽 값을 예측값으로 사용
+        def find_predictions(blocks, full_data, direction="front"):
             results = []
             for blk in blocks:
                 found = False
-                for i in range(0, len(full_data) - 6):
+                for i in range(6, len(full_data)):
                     for size in range(2, 7):
-                        sample = full_data[i:i+size]
+                        if direction == "front":
+                            sample = full_data[i:i+size]
+                        else:
+                            sample = list(reversed(full_data[i-size+1:i+1]))
                         if len(sample) != len(blk):
                             continue
                         if "".join(sample) == blk:
-                            if i > 0:
-                                results.append(full_data[i-1])
-                            else:
-                                results.append("❌ 없음")
+                            results.append(full_data[i-1] if i > 0 else "❌ 없음")
                             found = True
                             break
                     if found:
@@ -55,8 +57,8 @@ def predict():
 
         front_blocks = make_blocks(data, direction="front")
         back_blocks = make_blocks(data, direction="back")
-        front_preds = find_predictions(front_blocks, data)
-        back_preds = find_predictions(back_blocks, data)
+        front_preds = find_predictions(front_blocks, data, direction="front")
+        back_preds = find_predictions(back_blocks, data, direction="back")
 
         return jsonify({
             "예측회차": recent_round,
