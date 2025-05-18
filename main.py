@@ -5,9 +5,8 @@ from collections import Counter
 import os
 
 app = Flask(__name__)
-CORS(app)  # GitHub Pages에서 접근 허용
+CORS(app)
 
-# 대칭 및 유사 대칭 정의 (좌우, 홀짝 기준)
 mirror_map = {
     '좌삼짝': '우삼홀', '우삼홀': '좌삼짝',
     '좌삼홀': '우삼짝', '우삼짝': '좌삼홀',
@@ -15,11 +14,9 @@ mirror_map = {
     '좌사홀': '우사짝', '우사짝': '좌사홀',
 }
 
-# 대칭과 유사 대칭 블럭 생성
 def get_transformed_block(block):
     return [mirror_map.get(b, b) for b in block]
 
-# 블럭 이름 생성 (문자열로 연결)
 def block_to_str(block):
     return '-'.join(block)
 
@@ -30,12 +27,14 @@ def root():
 @app.route('/predict')
 def predict():
     url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
+    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
-        res = requests.get(url)
+        res = requests.get(url, headers=headers)
+        res.raise_for_status()
         data = res.json()
         results = [row['result'] for row in data['rows']]
-    except:
-        return jsonify({"error": "데이터 불러오기 실패"})
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
     block_lengths = [2, 3, 4, 5]
     total_blocks = []
@@ -69,9 +68,7 @@ def predict():
         while len(top3) < 3:
             top3.append('❌ 없음')
 
-    return jsonify({
-        '예측값 Top3': top3
-    })
+    return jsonify({'예측값 Top3': top3})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
