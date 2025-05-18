@@ -1,109 +1,88 @@
-from flask import Flask, jsonify, send_from_directory
-from flask_cors import CORS
 import requests
-from collections import Counter
 import os
+from collections import Counter
+from flask import Flask, jsonify
 
 app = Flask(__name__)
-CORS(app)
 
-# 변환 함수: 사다리 raw 데이터 → 한글 블럭 이름
 def convert(entry):
     side = '좌' if entry['start_point'] == 'LEFT' else '우'
     count = str(entry['line_count'])
     oe = '짝' if entry['odd_even'] == 'EVEN' else '홀'
     return f"{side}{count}{oe}"
 
-# 대칭 블럭: 좌우 + 홀짝 반전
 def mirror(block):
-    result = []
-    for b in block.split('>'):
-        side = '우' if b[0] == '좌' else '좌'
-        oe = '짝' if b[2] == '홀' else '홀'
-        result.append(f"{side}{b[1]}{oe}")
-    return '>'.join(result)
+    side = '우' if block[0] == '좌' else '좌'
+    count = block[1]
+    oe = '홀' if block[2] == '짝' else '짝'
+    return f"{side}{count}{oe}"
 
-# 유사 대칭 블럭: 홀짝만 반전 (좌우는 유지)
 def similar(block):
-    result = []
-    for b in block.split('>'):
-        side = b[0]
-        oe = '짝' if b[2] == '홀' else '홀'
-        result.append(f"{side}{b[1]}{oe}")
-    return '>'.join(result)
+    side = block[0]  # 좌/우 유지
+    count = block[1]
+    oe = '홀' if block[2] == '짝' else '짝'
+    return f"{side}{count}{oe}"
 
-# 최근 블럭 리스트 생성 (2~5줄)
 def generate_blocks(data):
     blocks = []
     for size in range(2, 6):
-        if len(data) < size:
-            continue
-        block = '>'.join([convert(entry) for entry in data[-size:]])
-        blocks.append((size, block))
+        if len(data) >= size:
+            block = ''.join([convert(row) for row in data[-size:]])
+            blocks.append((size, block))
     return blocks
 
-# 예측값 추출 함수 (블럭당 상단/하단 2개씩)
-def find_predictions(data, blocks):
-    total = len(data)
+def find_predictions(raw_data, blocks):
+    total = len(raw_data)
     predictions = []
 
     for size, block in blocks:
         variants = [mirror(block), similar(block)]
 
         for use_block in variants:
+            matched = False
             for i in range(total - size):
-                compare = '>'.join([convert(entry) for entry in data[i:i+size]])
+                compare = ''.join([convert(raw_data[i + j]) for j in range(size)])
                 if compare == use_block:
+                    matched = True
                     if i > 0:
-                        predictions.append(convert(data[i - 1]))  # 상단
+                        predictions.append(convert(raw_data[i - 1]))
+                    else:
+                        predictions.append("❌ 없음")
                     if i + size < total:
-                        predictions.append(convert(data[i + size]))  # 하단
-                    break
-            else:
+                        predictions.append(convert(raw_data[i + size]))
+                    else:
+                        predictions.append("❌ 없음")
+            if not matched:
                 predictions.append("❌ 없음")
                 predictions.append("❌ 없음")
 
     return predictions
 
-@app.route("/")
-def root():
-    return send_from_directory('.', 'index.html')
-
 @app.route("/predict")
 def predict():
     try:
         url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers)
+        response = requests.get(url)
         raw_data = response.json()
 
-        if not isinstance(raw_data, list):
-            return jsonify({"error": "Invalid data format"})
-
-        if len(raw_data) < 3:
+        if len(raw_data) < 10:
             return jsonify({"error": "데이터가 부족합니다"})
 
-        # 진행 중인 마지막 줄은 제외하고 최근 확정 회차 기준으로 +1
         last_round = int(raw_data[0]["date_round"])
         predict_round = last_round + 1
 
         recent = raw_data[-288:]
         blocks = generate_blocks(recent)
-        predictions = find_predictions(recent, blocks)
+        predictions = find_predictions(raw_data, blocks)
 
         filtered = [p for p in predictions if p != "❌ 없음"]
-        if filtered:
-            top3 = [item for item, _ in Counter(filtered).most_common(3)]
+        if len(filtered) >= 3:
+            top3 = [item[0] for item in Counter(filtered).most_common(3)]
         else:
-            top3 = ["❌ 없음", "❌ 없음", "❌ 없음"]
+            top3 = [item[0] for item in Counter(filtered).most_common(3)]
+            top3 += ["❌ 없음"] * (3 - len(top3))
 
-        while len(top3) < 3:
-            top3.append("❌ 없음")
-
-        return jsonify({
-            "예측회차": predict_round,
-            "예측값 Top3": top3
-        })
+        return jsonify({"예측 회차": predict_round, "Top3": top3})
 
     except Exception as e:
         return jsonify({"error": str(e)})
