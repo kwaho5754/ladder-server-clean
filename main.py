@@ -82,6 +82,9 @@ def predict():
 
         # 최근 확정된 회차를 기준으로 예측 회차 계산
         confirmed = [entry for entry in raw_data if entry.get("result")]
+        if not confirmed:
+            return jsonify({"error": "확정된 회차 정보가 없습니다"})
+
         last_round = int(confirmed[-1]["date_round"])
         predict_round = last_round + 1
 
