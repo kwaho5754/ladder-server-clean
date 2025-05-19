@@ -7,14 +7,12 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# 변환 함수: 사다리 raw 데이터 → 한글 블럭 이름
 def convert(entry):
     side = '좌' if entry['start_point'] == 'LEFT' else '우'
     count = str(entry['line_count'])
     oe = '짝' if entry['odd_even'] == 'EVEN' else '홀'
     return f"{side}{count}{oe}"
 
-# 대칭 블럭: 좌우 + 홀짝 반전
 def mirror(block):
     result = []
     for b in block.split('>'):
@@ -23,38 +21,44 @@ def mirror(block):
         result.append(f"{side}{b[1]}{oe}")
     return '>'.join(result)
 
-# 블럭 생성: 과거 → 최근 순서로 블럭 생성
+# 🔍 블럭 생성 디버그
 def generate_blocks(data):
     blocks = []
     for size in range(2, 6):
         if len(data) < size:
             continue
-        block_data = list(data[:size])  # 과거 순서 그대로 사용
+        block_data = list(data[:size])  # 과거 기준 블럭
         block = '>'.join([convert(entry) for entry in block_data])
+        print(f"[DEBUG] 생성된 블럭(size={size}): {block}")
         blocks.append((size, block))
     return blocks
 
-# 전체 매칭 스캔: 과거 → 최근 순서로 블럭 매칭
+# 🔍 매칭 & 예측 디버그
 def find_predictions(data, blocks):
     total = len(data)
     predictions = []
 
     for size, block in blocks:
         variants = [block, mirror(block)]
-
+        print(f"[DEBUG] 비교 블럭: {block} / 대칭: {variants[1]}")
         for use_block in variants:
-            for i in range(total - size):  # 과거 → 최근 방향
+            for i in range(total - size):
                 compare = '>'.join([convert(entry) for entry in data[i:i+size]])
                 if compare == use_block:
+                    up = convert(data[i - 1]) if i > 0 else "❌"
+                    down = convert(data[i + size]) if i + size < total else "❌"
+                    print(f"[MATCH] index={i}, 매칭 블럭={use_block}, 상단={up}, 하단={down}")
                     if i > 0:
-                        predictions.append(convert(data[i - 1]))  # 상단
+                        predictions.append(up)
                     if i + size < total:
-                        predictions.append(convert(data[i + size]))  # 하단
+                        predictions.append(down)
 
     if not predictions:
+        print("[DEBUG] 예측값 없음 → ❌ 없음 3개 리턴")
         return ["❌ 없음", "❌ 없음", "❌ 없음"]
 
     top3 = [item for item, _ in Counter(predictions).most_common(3)]
+    print(f"[RESULT] Top3 예측값: {top3}")
     while len(top3) < 3:
         top3.append("❌ 없음")
     return top3
@@ -80,7 +84,11 @@ def predict():
         last_round = int(raw_data[0]["date_round"])
         predict_round = last_round + 1
 
-        recent = list(reversed(raw_data[-288:]))  # ✅ 과거 → 최근 순서로 재정렬
+        # 🔍 recent 순서 확인
+        recent = list(reversed(raw_data[-288:]))
+        print(f"[DEBUG] recent[0] 회차(가장 과거): {recent[0]['date_round']}")
+        print(f"[DEBUG] recent[-1] 회차(가장 최신): {recent[-1]['date_round']}")
+
         blocks = generate_blocks(recent)
         top3 = find_predictions(recent, blocks)
 
