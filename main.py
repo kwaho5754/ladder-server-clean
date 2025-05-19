@@ -23,13 +23,14 @@ def mirror(block):
         result.append(f"{side}{b[1]}{oe}")
     return '>'.join(result)
 
-# 최근 블럭 리스트 생성 (2~5줄)
+# ✅ 블럭 생성: 최근 N줄 → 순서를 reversed() 해서 과거→최근 순으로 블럭 생성
 def generate_blocks(data):
     blocks = []
     for size in range(2, 6):
         if len(data) < size:
             continue
-        block = '>'.join([convert(entry) for entry in data[-size:]])
+        block_data = list(reversed(data[-size:]))  # ← 여기만 바뀜
+        block = '>'.join([convert(entry) for entry in block_data])
         blocks.append((size, block))
     return blocks
 
