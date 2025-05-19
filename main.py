@@ -7,26 +7,30 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# 원본 블럭 → 좌3짝 형태
+# 변환 함수: 좌3짝 형태로 변환
 def convert(entry):
     side = '좌' if entry['start_point'] == 'LEFT' else '우'
     count = str(entry['line_count'])
     oe = '짝' if entry['odd_even'] == 'EVEN' else '홀'
     return f"{side}{count}{oe}"
 
-# 홀짝 흐름 블럭 → 홀 > 짝 > 홀
-def make_odd_even_block(data, start, size):
-    return '>'.join([
-        '짝' if data[i]['odd_even'] == 'EVEN' else '홀'
-        for i in range(start, start + size)
-    ])
-
-# 구조 반복 블럭 → 방향 흐름 or 좌3 > 우4 > 좌3
+# 구조 반복 블럭: 방향 흐름만 추출
 def make_direction_pattern_block(data, start, size):
     return '>'.join([
         '좌' if data[i]['start_point'] == 'LEFT' else '우'
         for i in range(start, start + size)
     ])
+
+# 중간 대칭 블럭: 중간 줄만 좌우 반전
+def make_middle_mirror_block(data, start, size):
+    if size < 3:
+        return None
+    block = [convert(data[i]) for i in range(start, start + size)]
+    mid = size // 2
+    side = '우' if block[mid][0] == '좌' else '좌'
+    oe = '짝' if block[mid][2] == '홀' else '홀'
+    block[mid] = f"{side}{block[mid][1]}{oe}"
+    return '>'.join(block)
 
 @app.route("/predict")
 def predict():
@@ -42,22 +46,24 @@ def predict():
         data = raw_data[-288:]
         predictions = []
 
-        # 최신 블럭 준비 (홀짝 흐름 + 방향 흐름)
+        # 최신 블럭들 준비 (구조 반복 + 중간 대칭)
         latest_blocks = []
         for size in range(2, 6):
             idx = len(data) - size
-            oe_block = make_odd_even_block(data, idx, size)
             dir_block = make_direction_pattern_block(data, idx, size)
-            latest_blocks.extend([oe_block, dir_block])
+            mid_block = make_middle_mirror_block(data, idx, size)
+            latest_blocks.append(dir_block)
+            if mid_block:
+                latest_blocks.append(mid_block)
 
-        # 과거 블럭 탐색 (정방향)
+        # 과거 블럭과 비교
         for size in range(2, 6):
             for i in range(len(data) - size):
-                oe_block = make_odd_even_block(data, i, size)
                 dir_block = make_direction_pattern_block(data, i, size)
+                mid_block = make_middle_mirror_block(data, i, size)
 
-                for block in [oe_block, dir_block]:
-                    if block in latest_blocks:
+                for block in [dir_block, mid_block]:
+                    if block and block in latest_blocks:
                         if i > 0:
                             predictions.append(convert(data[i - 1]))  # 상단
                         if i + size < len(data):
