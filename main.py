@@ -18,8 +18,8 @@ def convert(entry):
 def make_block(data, start, size):
     return '>'.join([convert(entry) for entry in data[start:start + size]])
 
-@app.route("/sliding_predict")
-def sliding_predict():
+@app.route("/predict")
+def predict():
     try:
         url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -29,24 +29,24 @@ def sliding_predict():
         if not isinstance(raw_data, list) or len(raw_data) < 10:
             return jsonify({"error": "데이터 형식 또는 길이 오류"})
 
-        data = list(reversed(raw_data[-288:]))  # 과거 → 최근 순서
+        data = raw_data[-288:]  # 최신순 (최근 → 과거)
 
-        block_map = defaultdict(list)  # 블러그 → 다음 경기 결과
+        block_map = defaultdict(list)  # 블럭 → 다음 결과 리스트
 
-        # 플러그 다양화: 각 경기차가 다음과 어떻게 연결되는가
-        for size in range(2, 6):  # 2~5줄 블러그
-            for i in range(len(data) - size - 1):
+        # 블럭 생성 및 매핑 (뒤에서부터 거꾸로 탐색)
+        for size in range(2, 6):
+            for i in reversed(range(len(data) - size - 1)):
                 block = make_block(data, i, size)
                 next_result = convert(data[i + size])
                 block_map[block].append(next_result)
 
-        # 가장 최근 블러그 하나 생성 후 예측
+        # 가장 마지막 줄 기준 블럭 생성 (최근 데이터 맨 끝)
         predictions = []
         for size in range(2, 6):
             if len(data) < size:
                 continue
-            current_block = make_block(data, -size, size)
-            variants = [current_block, ]  # 현재의 블러그 바로 해석
+            current_block = make_block(data, len(data) - size, size)
+            variants = [current_block]
 
             for block in variants:
                 if block in block_map:
@@ -60,7 +60,7 @@ def sliding_predict():
 
         return jsonify({
             "예측회차": int(raw_data[0]["date_round"]) + 1,
-            "Top3 예측값 (sliding)": top3
+            "Top3 예측값": top3
         })
 
     except Exception as e:
