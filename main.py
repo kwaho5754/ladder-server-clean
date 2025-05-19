@@ -18,14 +18,31 @@ def convert(entry):
 def make_block(data, start, size):
     return '>'.join([convert(data[i]) for i in range(start, start + size)])
 
-# 대칭 변환
-def mirror_block(block):
-    mirrored = []
-    for b in block.split('>'):
-        side = '우' if b[0] == '좌' else '좌'
-        oe = '짝' if b[2] == '홀' else '홀'
-        mirrored.append(f"{side}{b[1]}{oe}")
-    return '>'.join(mirrored)
+# 중간 줄만 대칭
+def make_middle_mirror_block(data, start, size):
+    if size < 3:
+        return None
+    block = [convert(data[i]) for i in range(start, start + size)]
+    mid = size // 2
+    side = '우' if block[mid][0] == '좌' else '좌'
+    oe = '짝' if block[mid][2] == '홀' else '홀'
+    block[mid] = f"{side}{block[mid][1]}{oe}"
+    return '>'.join(block)
+
+# 양 끝만 대칭 (중간은 그대로)
+def make_edge_mirror_block(data, start, size):
+    block = [convert(data[i]) for i in range(start, start + size)]
+    if size < 2:
+        return None
+    # 앞쪽
+    side_f = '우' if block[0][0] == '좌' else '좌'
+    oe_f = '짝' if block[0][2] == '홀' else '홀'
+    block[0] = f"{side_f}{block[0][1]}{oe_f}"
+    # 뒤쪽
+    side_l = '우' if block[-1][0] == '좌' else '좌'
+    oe_l = '짝' if block[-1][2] == '홀' else '홀'
+    block[-1] = f"{side_l}{block[-1][1]}{oe_l}"
+    return '>'.join(block)
 
 @app.route("/predict")
 def predict():
@@ -38,29 +55,30 @@ def predict():
         if not isinstance(raw_data, list) or len(raw_data) < 10:
             return jsonify({"error": "데이터 형식 또는 길이 오류"})
 
-        data = raw_data[-288:]  # 최신 288줄
+        data = raw_data[-288:]
 
         predictions = []
 
-        # 최신 블럭들(원본 + 대칭) 준비
+        # 최신 블럭들(중간 대칭, 반중간 대칭만 적용)
         latest_blocks = []
         for size in range(2, 6):
-            if len(data) >= size:
-                latest = make_block(data, len(data) - size, size)
-                latest_blocks.append(latest)
-                latest_blocks.append(mirror_block(latest))
+            idx = len(data) - size
+            m_block = make_middle_mirror_block(data, idx, size)
+            e_block = make_edge_mirror_block(data, idx, size)
+            if m_block:
+                latest_blocks.append(m_block)
+            if e_block:
+                latest_blocks.append(e_block)
 
-        # 과거부터 정방향 순회하며 블럭 생성 및 매칭
+        # 과거 블럭과 매칭
         for size in range(2, 6):
             for i in range(len(data) - size):
                 block = make_block(data, i, size)
                 if block in latest_blocks:
-                    # 상단값
                     if i > 0:
-                        predictions.append(convert(data[i - 1]))
-                    # 하단값
+                        predictions.append(convert(data[i - 1]))  # 상단
                     if i + size < len(data):
-                        predictions.append(convert(data[i + size]))
+                        predictions.append(convert(data[i + size]))  # 하단
 
         top3 = [item for item, _ in Counter(predictions).most_common(3)]
         while len(top3) < 3:
