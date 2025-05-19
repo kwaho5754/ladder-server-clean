@@ -23,15 +23,6 @@ def mirror(block):
         result.append(f"{side}{b[1]}{oe}")
     return '>'.join(result)
 
-# 유사 대칭 블럭: 홀짝만 반전 (좌우는 유지)
-def similar(block):
-    result = []
-    for b in block.split('>'):
-        side = b[0]
-        oe = '짝' if b[2] == '홀' else '홀'
-        result.append(f"{side}{b[1]}{oe}")
-    return '>'.join(result)
-
 # 최근 블럭 리스트 생성 (2~5줄)
 def generate_blocks(data):
     blocks = []
@@ -48,18 +39,20 @@ def find_predictions(data, blocks):
     predictions = []
 
     for size, block in blocks:
-        variants = [mirror(block), similar(block)]
+        variants = [block, mirror(block)]  # 원본 + 대칭만 사용
 
         for use_block in variants:
-            for i in range(total - size):
+            found = False
+            for i in range(total - size):  # 과거 → 최근 방향으로 탐색
                 compare = '>'.join([convert(entry) for entry in data[i:i+size]])
                 if compare == use_block:
                     if i > 0:
                         predictions.append(convert(data[i - 1]))  # 상단
                     if i + size < total:
                         predictions.append(convert(data[i + size]))  # 하단
+                    found = True
                     break
-            else:
+            if not found:
                 predictions.append("❌ 없음")
                 predictions.append("❌ 없음")
 
