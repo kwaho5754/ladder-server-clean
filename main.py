@@ -60,7 +60,7 @@ def predict():
 
         return jsonify({
             "예측회차": int(raw_data[0]["date_round"]) + 1,
-            "Top3 예측값": top3
+            "예측값 Top3": top3  # ✅ key 이름 수정
         })
 
     except Exception as e:
