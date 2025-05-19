@@ -23,24 +23,24 @@ def mirror(block):
         result.append(f"{side}{b[1]}{oe}")
     return '>'.join(result)
 
-# ✅ 블럭 생성: 최근 N줄 → 순서를 reversed() 해서 과거→최근 순으로 블럭 생성
+# 블럭 생성: 과거 → 최근 순서로 블럭 생성
 def generate_blocks(data):
     blocks = []
     for size in range(2, 6):
         if len(data) < size:
             continue
-        block_data = list(reversed(data[-size:]))  # ← 여기만 바뀜
+        block_data = list(data[:size])  # 과거 순서 그대로 사용
         block = '>'.join([convert(entry) for entry in block_data])
         blocks.append((size, block))
     return blocks
 
-# 전체 매칭 스캔 방식 → 상단/하단 예측값 전부 수집 → 빈도 기반 Top3 선택
+# 전체 매칭 스캔: 과거 → 최근 순서로 블럭 매칭
 def find_predictions(data, blocks):
     total = len(data)
     predictions = []
 
     for size, block in blocks:
-        variants = [block, mirror(block)]  # 원본 + 대칭
+        variants = [block, mirror(block)]
 
         for use_block in variants:
             for i in range(total - size):  # 과거 → 최근 방향
@@ -80,7 +80,7 @@ def predict():
         last_round = int(raw_data[0]["date_round"])
         predict_round = last_round + 1
 
-        recent = raw_data[-288:]
+        recent = list(reversed(raw_data[-288:]))  # ✅ 과거 → 최근 순서로 재정렬
         blocks = generate_blocks(recent)
         top3 = find_predictions(recent, blocks)
 
