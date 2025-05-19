@@ -33,30 +33,30 @@ def generate_blocks(data):
         blocks.append((size, block))
     return blocks
 
-# 예측값 추출 함수 (블럭당 상단/하단 2개씩)
+# 전체 매칭 스캔 방식 → 상단/하단 예측값 전부 수집 → 빈도 기반 Top3 선택
 def find_predictions(data, blocks):
     total = len(data)
     predictions = []
 
     for size, block in blocks:
-        variants = [block, mirror(block)]  # 원본 + 대칭만 사용
+        variants = [block, mirror(block)]  # 원본 + 대칭
 
         for use_block in variants:
-            found = False
-            for i in range(total - size):  # 과거 → 최근 방향으로 탐색
+            for i in range(total - size):  # 과거 → 최근 방향
                 compare = '>'.join([convert(entry) for entry in data[i:i+size]])
                 if compare == use_block:
                     if i > 0:
                         predictions.append(convert(data[i - 1]))  # 상단
                     if i + size < total:
                         predictions.append(convert(data[i + size]))  # 하단
-                    found = True
-                    break
-            if not found:
-                predictions.append("❌ 없음")
-                predictions.append("❌ 없음")
 
-    return predictions
+    if not predictions:
+        return ["❌ 없음", "❌ 없음", "❌ 없음"]
+
+    top3 = [item for item, _ in Counter(predictions).most_common(3)]
+    while len(top3) < 3:
+        top3.append("❌ 없음")
+    return top3
 
 @app.route("/")
 def root():
@@ -76,22 +76,12 @@ def predict():
         if len(raw_data) < 3:
             return jsonify({"error": "데이터가 부족합니다"})
 
-        # 진행 중인 마지막 줄은 제외하고 최근 확정 회차 기준으로 +1
         last_round = int(raw_data[0]["date_round"])
         predict_round = last_round + 1
 
         recent = raw_data[-288:]
         blocks = generate_blocks(recent)
-        predictions = find_predictions(recent, blocks)
-
-        filtered = [p for p in predictions if p != "❌ 없음"]
-        if filtered:
-            top3 = [item for item, _ in Counter(filtered).most_common(3)]
-        else:
-            top3 = ["❌ 없음", "❌ 없음", "❌ 없음"]
-
-        while len(top3) < 3:
-            top3.append("❌ 없음")
+        top3 = find_predictions(recent, blocks)
 
         return jsonify({
             "예측회차": predict_round,
