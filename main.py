@@ -40,16 +40,15 @@ def predict():
         data = raw_data[-288:]
         predictions = []
         seen_matches = set()
+        used_prediction_positions = set()  # ✅ 예측 위치 중복 제한
 
-        # ✅ 역방향: 아래에서 위로 블럭 생성
         for size in range(2, 6):  # 2~5줄 고정 블럭
-            for i in range(len(data) - size - 1, 0, -1):  # 아래에서 위로
+            for i in range(len(data) - size - 1, 0, -1):  # 아래에서 위로 블럭 생성
                 block = [convert(data[j]) for j in range(i, i + size)]
                 block_str = '>'.join(block)
                 block_mirror = mirror(block_str)
 
-                # 위쪽에서 매칭 탐색
-                for k in range(0, i - size):
+                for k in range(0, i - size):  # 위쪽 블럭 탐색
                     past_block = [convert(data[j]) for j in range(k, k + size)]
                     past_block_str = '>'.join(past_block)
 
@@ -59,11 +58,13 @@ def predict():
                             continue
                         seen_matches.add(match_key)
 
-                        # ✅ 매칭된 블럭의 상단/하단 결과 모두 예측값으로 반영
-                        if k > 0:
+                        # ✅ 예측 위치 기준 중복 제한
+                        if k > 0 and k - 1 not in used_prediction_positions:
                             predictions.append(convert(data[k - 1]))
-                        if k + size < len(data):
+                            used_prediction_positions.add(k - 1)
+                        if k + size < len(data) and k + size not in used_prediction_positions:
                             predictions.append(convert(data[k + size]))
+                            used_prediction_positions.add(k + size)
 
         counter = Counter(predictions)
         top3_raw = counter.most_common(3)
