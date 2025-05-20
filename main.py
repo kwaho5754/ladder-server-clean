@@ -41,14 +41,14 @@ def predict():
         predictions = []
         seen_matches = set()
 
-        # ✅ 과거부터 최근 방향으로 블럭 생성
+        # ✅ 아래에서 위로 (당신 기준 역방향) 블럭 생성
         for size in range(2, 6):  # 2~5줄 고정 블럭
             for i in range(len(data) - size - 1):
                 block = [convert(data[j]) for j in range(i, i + size)]
                 block_str = '>'.join(block)
                 block_mirror = mirror(block_str)
 
-                # 미래 방향에서 같은 블럭이 있는지 탐색
+                # 미래 방향 (위쪽)에서 블럭 매칭 탐색
                 for k in range(i + 1, len(data) - size):
                     future_block = [convert(data[j]) for j in range(k, k + size)]
                     future_block_str = '>'.join(future_block)
@@ -59,6 +59,9 @@ def predict():
                             continue
                         seen_matches.add(match_key)
 
+                        # ✅ 매칭된 블럭의 상단 / 하단 결과 모두 예측값에 추가
+                        if k > 0:
+                            predictions.append(convert(data[k - 1]))
                         if k + size < len(data):
                             predictions.append(convert(data[k + size]))
 
