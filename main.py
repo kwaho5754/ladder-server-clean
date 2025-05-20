@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 from flask_cors import CORS
 import requests
 from collections import Counter
@@ -7,21 +7,30 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# 변환 함수: 좌3짝 형태로 변환
+# 결과를 한글 블럭명으로 변환
 def convert(entry):
     side = '좌' if entry['start_point'] == 'LEFT' else '우'
     count = str(entry['line_count'])
     oe = '짝' if entry['odd_even'] == 'EVEN' else '홀'
     return f"{side}{count}{oe}"
 
-# 구조 반복 블럭: 방향 흐름만 추출
+# 대칭 변환
+def mirror(block):
+    result = []
+    for b in block.split('>'):
+        side = '우' if b[0] == '좌' else '좌'
+        oe = '짝' if b[2] == '홀' else '홀'
+        result.append(f"{side}{b[1]}{oe}")
+    return '>'.join(result)
+
+# 구조 반복 (좌우 흐름만)
 def make_direction_pattern_block(data, start, size):
     return '>'.join([
         '좌' if data[i]['start_point'] == 'LEFT' else '우'
         for i in range(start, start + size)
     ])
 
-# 중간 대칭 블럭: 중간 줄만 좌우 반전
+# 중간 대칭 블럭 (중간 줄만 반전)
 def make_middle_mirror_block(data, start, size):
     if size < 3:
         return None
@@ -31,6 +40,10 @@ def make_middle_mirror_block(data, start, size):
     oe = '짝' if block[mid][2] == '홀' else '홀'
     block[mid] = f"{side}{block[mid][1]}{oe}"
     return '>'.join(block)
+
+@app.route("/")
+def index():
+    return render_template("index.html")
 
 @app.route("/predict")
 def predict():
@@ -45,29 +58,32 @@ def predict():
 
         data = raw_data[-288:]
         predictions = []
-
-        # 최신 블럭들 준비 (구조 반복 + 중간 대칭)
         latest_blocks = []
+
         for size in range(2, 6):
             idx = len(data) - size
-            dir_block = make_direction_pattern_block(data, idx, size)
+            block = '>'.join([convert(data[i]) for i in range(idx, len(data))])
+            latest_blocks.append(block)
+            latest_blocks.append(mirror(block))
+            latest_blocks.append(make_direction_pattern_block(data, idx, size))
             mid_block = make_middle_mirror_block(data, idx, size)
-            latest_blocks.append(dir_block)
             if mid_block:
                 latest_blocks.append(mid_block)
 
-        # 과거 블럭과 비교
         for size in range(2, 6):
             for i in range(len(data) - size):
-                dir_block = make_direction_pattern_block(data, i, size)
-                mid_block = make_middle_mirror_block(data, i, size)
-
-                for block in [dir_block, mid_block]:
+                compare_blocks = [
+                    '>'.join([convert(data[j]) for j in range(i, i + size)]),
+                    mirror('>'.join([convert(data[j]) for j in range(i, i + size)])),
+                    make_direction_pattern_block(data, i, size),
+                    make_middle_mirror_block(data, i, size)
+                ]
+                for block in compare_blocks:
                     if block and block in latest_blocks:
                         if i > 0:
-                            predictions.append(convert(data[i - 1]))  # 상단
+                            predictions.append(convert(data[i - 1]))
                         if i + size < len(data):
-                            predictions.append(convert(data[i + size]))  # 하단
+                            predictions.append(convert(data[i + size]))
 
         top3 = [item for item, _ in Counter(predictions).most_common(3)]
         while len(top3) < 3:
@@ -75,12 +91,12 @@ def predict():
 
         return jsonify({
             "예측회차": int(raw_data[0]["date_round"]) + 1,
-            "예측값 Top3": top3
+            "Top3 예측값": top3
         })
 
     except Exception as e:
         return jsonify({"error": str(e)})
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
