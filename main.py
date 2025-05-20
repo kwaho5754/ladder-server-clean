@@ -14,6 +14,16 @@ def convert(entry):
     oe = '짝' if entry['odd_even'] == 'EVEN' else '홀'
     return f"{side}{count}{oe}"
 
+def reverse_block(block):
+    return list(reversed(block))
+
+def get_mirror_name(name):
+    table = str.maketrans("좌우", "우좌")
+    return name.translate(table)
+
+def convert_block_to_str(block):
+    return '>'.join(block)
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -36,42 +46,57 @@ def predict():
         debug_logs = []
 
         for size in range(2, 6):  # 2~5줄 고정 블럭
-            for i in range(len(data) - size - 1, 0, -1):  # 아래에서 위로 블럭 생성
-                block = [convert(data[j]) for j in range(i, i + size)]
-                block_str = '>'.join(block)
+            for i in range(len(data) - size - 1):
+                base_block = [convert(data[j]) for j in range(i, i + size)]
 
-                for k in range(0, i - size):  # 위쪽 블럭 탐색
-                    past_block = [convert(data[j]) for j in range(k, k + size)]
-                    past_block_str = '>'.join(past_block)
+                # 역정렬 블럭
+                rev_block = reverse_block(base_block)
+                rev_block_str = convert_block_to_str(rev_block)
 
-                    if past_block_str == block_str:
-                        match_key = (block_str, k)
-                        if match_key in seen_matches:
-                            continue
-                        seen_matches.add(match_key)
+                # 역정렬 + 대칭 블럭
+                mirror_rev_block = [get_mirror_name(x) for x in rev_block]
+                mirror_rev_block_str = convert_block_to_str(mirror_rev_block)
 
-                        match_log = {
-                            "블럭": block_str,
-                            "생성위치(i)": i,
-                            "매칭위치(k)": k,
-                            "예측값": []
-                        }
+                candidate_blocks = [
+                    ("역정렬", rev_block_str),
+                    ("역정렬대칭", mirror_rev_block_str)
+                ]
 
-                        prediction_candidates = []
-                        if k > 0 and k - 1 not in used_prediction_positions:
-                            prediction_candidates.append(("상단(k-1)", k - 1))
-                        if k + size < len(data) and k + size not in used_prediction_positions:
-                            prediction_candidates.append(("하단(k+size)", k + size))
+                for block_type, block_str in candidate_blocks:
+                    for k in range(i + size, len(data) - size):
+                        past_block = [convert(data[j]) for j in range(k, k + size)]
+                        past_block_str = convert_block_to_str(past_block)
 
-                        if prediction_candidates:
-                            choice = random.choice(prediction_candidates)
-                            position_label, pos_index = choice
-                            result = convert(data[pos_index])
-                            predictions.append(result)
-                            used_prediction_positions.add(pos_index)
-                            match_log["예측값"].append({"위치": position_label, "값": result})
+                        if past_block_str == block_str:
+                            match_key = (block_str, k)
+                            if match_key in seen_matches:
+                                continue
+                            seen_matches.add(match_key)
 
-                        debug_logs.append(match_log)
+                            match_log = {
+                                "블럭유형": block_type,
+                                "블럭": block_str,
+                                "현재위치(i)": i,
+                                "매칭위치(k)": k,
+                                "예측값": []
+                            }
+
+                            prediction_candidates = []
+                            if k > 0 and k - 1 not in used_prediction_positions:
+                                prediction_candidates.append(("상단(k-1)", k - 1))
+                            if k + size < len(data) and k + size not in used_prediction_positions:
+                                prediction_candidates.append(("하단(k+size)", k + size))
+
+                            if prediction_candidates:
+                                choice = random.choice(prediction_candidates)
+                                label, pos = choice
+                                result = convert(data[pos])
+                                predictions.append(result)
+                                used_prediction_positions.add(pos)
+                                match_log["예측값"].append({"위치": label, "값": result})
+
+                            debug_logs.append(match_log)
+                            break  # 한 번 매칭되면 다음 블럭으로
 
         counter = Counter(predictions)
         top3_raw = counter.most_common(3)
