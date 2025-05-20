@@ -14,9 +14,6 @@ def convert(entry):
     oe = '짝' if entry['odd_even'] == 'EVEN' else '홀'
     return f"{side}{count}{oe}"
 
-def reverse_block(block):
-    return list(reversed(block))
-
 def get_mirror_name(name):
     table = str.maketrans("좌우", "우좌")
     return name.translate(table)
@@ -43,29 +40,25 @@ def predict():
         predictions = []
         seen_matches = set()
         used_prediction_positions = set()
-        used_blocks = set()  # ✅ 블럭당 중복 예측 방지용
+        used_blocks = set()
         debug_logs = []
 
         for size in range(2, 6):  # 2~5줄 고정 블럭
             for i in range(len(data) - size - 1):
                 base_block = [convert(data[j]) for j in range(i, i + size)]
+                base_block_str = convert_block_to_str(base_block)
 
-                # 역정렬 블럭
-                rev_block = reverse_block(base_block)
-                rev_block_str = convert_block_to_str(rev_block)
-
-                # 역정렬 + 대칭 블럭
-                mirror_rev_block = [get_mirror_name(x) for x in rev_block]
-                mirror_rev_block_str = convert_block_to_str(mirror_rev_block)
+                mirror_block = [get_mirror_name(x) for x in base_block]
+                mirror_block_str = convert_block_to_str(mirror_block)
 
                 candidate_blocks = [
-                    ("역정렬", rev_block_str),
-                    ("역정렬대칭", mirror_rev_block_str)
+                    ("원본", base_block_str),
+                    ("대칭", mirror_block_str)
                 ]
 
                 for block_type, block_str in candidate_blocks:
                     if block_str in used_blocks:
-                        continue  # ✅ 블럭당 예측값 1회 제한
+                        continue
                     used_blocks.add(block_str)
 
                     for k in range(i + size, len(data) - size):
@@ -93,15 +86,14 @@ def predict():
                                 prediction_candidates.append(("하단(k+size)", k + size))
 
                             if prediction_candidates:
-                                choice = random.choice(prediction_candidates)
-                                label, pos = choice
+                                label, pos = random.choice(prediction_candidates)
                                 result = convert(data[pos])
                                 predictions.append(result)
                                 used_prediction_positions.add(pos)
                                 match_log["예측값"].append({"위치": label, "값": result})
 
                             debug_logs.append(match_log)
-                            break  # 매칭된 블럭은 1회만 사용
+                            break  # 블럭 1회만 사용
 
         counter = Counter(predictions)
         top3_raw = counter.most_common(3)
