@@ -13,15 +13,6 @@ def convert(entry):
     oe = '짝' if entry['odd_even'] == 'EVEN' else '홀'
     return f"{side}{count}{oe}"
 
-# 좌↔우, 홀↔짝 대칭 변환
-def mirror(block):
-    result = []
-    for b in block.split('>'):
-        side = '우' if b[0] == '좌' else '좌'
-        oe = '홀' if b[2] == '짝' else '짝'
-        result.append(f"{side}{b[1]}{oe}")
-    return '>'.join(result)
-
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -40,25 +31,24 @@ def predict():
         data = raw_data[-288:]
         predictions = []
         seen_matches = set()
-        used_prediction_positions = set()  # ✅ 예측 위치 중복 제한
+        used_prediction_positions = set()  # 예측 위치 중복 제한
 
         for size in range(2, 6):  # 2~5줄 고정 블럭
             for i in range(len(data) - size - 1, 0, -1):  # 아래에서 위로 블럭 생성
                 block = [convert(data[j]) for j in range(i, i + size)]
                 block_str = '>'.join(block)
-                block_mirror = mirror(block_str)
 
                 for k in range(0, i - size):  # 위쪽 블럭 탐색
                     past_block = [convert(data[j]) for j in range(k, k + size)]
                     past_block_str = '>'.join(past_block)
 
-                    if past_block_str in (block_str, block_mirror):
+                    if past_block_str == block_str:
                         match_key = (block_str, k)
                         if match_key in seen_matches:
                             continue
                         seen_matches.add(match_key)
 
-                        # ✅ 예측 위치 기준 중복 제한
+                        # 예측 위치 기준 중복 제한
                         if k > 0 and k - 1 not in used_prediction_positions:
                             predictions.append(convert(data[k - 1]))
                             used_prediction_positions.add(k - 1)
