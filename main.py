@@ -3,6 +3,7 @@ from flask_cors import CORS
 import requests
 from collections import Counter
 import os
+import random
 
 app = Flask(__name__)
 CORS(app)
@@ -31,8 +32,8 @@ def predict():
         data = raw_data[-288:]
         predictions = []
         seen_matches = set()
-        used_prediction_positions = set()  # 예측 위치 중복 제한
-        debug_logs = []  # 디버깅 기록
+        used_prediction_positions = set()
+        debug_logs = []
 
         for size in range(2, 6):  # 2~5줄 고정 블럭
             for i in range(len(data) - size - 1, 0, -1):  # 아래에서 위로 블럭 생성
@@ -56,18 +57,19 @@ def predict():
                             "예측값": []
                         }
 
-                        # 예측 위치 기준 중복 제한
+                        prediction_candidates = []
                         if k > 0 and k - 1 not in used_prediction_positions:
-                            result = convert(data[k - 1])
-                            predictions.append(result)
-                            used_prediction_positions.add(k - 1)
-                            match_log["예측값"].append({"위치": "상단(k-1)", "값": result})
-
+                            prediction_candidates.append(("상단(k-1)", k - 1))
                         if k + size < len(data) and k + size not in used_prediction_positions:
-                            result = convert(data[k + size])
+                            prediction_candidates.append(("하단(k+size)", k + size))
+
+                        if prediction_candidates:
+                            choice = random.choice(prediction_candidates)
+                            position_label, pos_index = choice
+                            result = convert(data[pos_index])
                             predictions.append(result)
-                            used_prediction_positions.add(k + size)
-                            match_log["예측값"].append({"위치": "하단(k+size)", "값": result})
+                            used_prediction_positions.add(pos_index)
+                            match_log["예측값"].append({"위치": position_label, "값": result})
 
                         debug_logs.append(match_log)
 
@@ -81,7 +83,7 @@ def predict():
         return jsonify({
             "예측회차": int(raw_data[0]["date_round"]) + 1,
             "Top3 예측값": top3,
-            "디버깅로그": debug_logs  # 전체 블럭 매칭 및 예측 위치 로그 출력
+            "디버깅로그": debug_logs
         })
 
     except Exception as e:
