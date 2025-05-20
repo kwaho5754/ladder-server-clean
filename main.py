@@ -13,7 +13,7 @@ def convert(entry):
     oe = '짝' if entry['odd_even'] == 'EVEN' else '홀'
     return f"{side}{count}{oe}"
 
-# 대칭 변환: 좌↔우, 홀↔짝
+# 좌↔우, 홀↔짝 대칭 변환
 def mirror(block):
     result = []
     for b in block.split('>'):
@@ -39,23 +39,29 @@ def predict():
 
         data = raw_data[-288:]
         predictions = []
+        seen_matches = set()  # 블럭-위치 중복 방지
 
-        # 역방향 블럭 생성 (과거 → 미래 방향)
-        for size in range(2, 6):
-            for i in range(len(data) - size - 1):  # 마지막 줄은 예측값이 없으므로 -1
+        # 역방향 기준 블럭 생성 + 매칭
+        for size in range(2, 6):  # 2~5줄 고정 블럭
+            for i in range(len(data) - size - 1):
                 block = [convert(data[j]) for j in range(i, i + size)]
                 block_str = '>'.join(block)
                 block_mirror = mirror(block_str)
 
-                # 미래에서 이 블럭이 등장하는지 찾기
                 for k in range(i + 1, len(data) - size):
                     future_block = [convert(data[j]) for j in range(k, k + size)]
                     future_block_str = '>'.join(future_block)
 
-                    if future_block_str == block_str or future_block_str == block_mirror:
-                        # 일치한 경우 → 해당 블럭의 **다음 줄**을 예측값으로 채택
+                    # 블럭 or 대칭 블럭이 미래에서 일치할 경우
+                    if future_block_str in (block_str, block_mirror):
+                        match_key = (block_str, k)
+                        if match_key in seen_matches:
+                            continue  # 블럭당 예측 1회 제한
+                        seen_matches.add(match_key)
+
                         if k + size < len(data):
-                            predictions.append(convert(data[k + size]))
+                            predicted = convert(data[k + size])
+                            predictions.append(predicted)
 
         counter = Counter(predictions)
         top3_raw = counter.most_common(3)
