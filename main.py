@@ -39,7 +39,7 @@ def predict():
         predictions = []
         seen_blocks = set()
 
-        # 최근 블럭 후보들 (원본 반대 + 대칭 반대 기준)
+        print("\n✅ [디버깅] 최근 블럭 수집 시작")
         for size in range(2, 6):
             idx = len(data) - size
             current_block = [convert(data[i]) for i in range(idx, len(data))]
@@ -49,26 +49,37 @@ def predict():
                 continue  # 대칭 성분이 섞인 블럭은 제외
 
             seen_blocks.add(current_block_str)
+            print(f"📌 [최근 블럭 등록] {current_block_str}")
 
-        # 과거에서 매칭되지 않았던 블럭 또는 비대칭 블럭만 기반으로 예측값 추출
+        print("\n✅ [디버깅] 과거 블럭 비교 및 예측값 수집")
         for size in range(2, 6):
             for i in range(len(data) - size):
                 past_block = [convert(data[j]) for j in range(i, i + size)]
                 past_block_str = '>'.join(past_block)
 
                 if not is_strictly_non_mirrored(past_block):
-                    continue  # 대칭 포함된 블럭은 분석 제외
+                    continue
 
                 if past_block_str in seen_blocks:
-                    continue  # 원본과 동일한 블럭은 배제 (원본 반대)
+                    continue
 
                 if i > 0:
-                    predictions.append(convert(data[i - 1]))
+                    pred_top = convert(data[i - 1])
+                    predictions.append(pred_top)
+                    print(f"⬆️ 상단 예측: {past_block_str} → {pred_top}")
                 if i + size < len(data):
-                    predictions.append(convert(data[i + size]))
+                    pred_bottom = convert(data[i + size])
+                    predictions.append(pred_bottom)
+                    print(f"⬇️ 하단 예측: {past_block_str} → {pred_bottom}")
+
+        print(f"\n📊 총 예측 후보 개수: {len(predictions)}")
 
         counter = Counter(predictions)
         top3_raw = counter.most_common(3)
+        print("\n🏆 Top 3 예측 결과 (빈도수 포함):")
+        for idx, (item, count) in enumerate(top3_raw, 1):
+            print(f"{idx}위: {item} (빈도: {count})")
+
         top3 = [{"value": item, "count": count} for item, count in top3_raw]
 
         while len(top3) < 3:
