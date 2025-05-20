@@ -32,6 +32,7 @@ def predict():
         predictions = []
         seen_matches = set()
         used_prediction_positions = set()  # 예측 위치 중복 제한
+        debug_logs = []  # 디버깅 기록
 
         for size in range(2, 6):  # 2~5줄 고정 블럭
             for i in range(len(data) - size - 1, 0, -1):  # 아래에서 위로 블럭 생성
@@ -48,13 +49,27 @@ def predict():
                             continue
                         seen_matches.add(match_key)
 
+                        match_log = {
+                            "블럭": block_str,
+                            "생성위치(i)": i,
+                            "매칭위치(k)": k,
+                            "예측값": []
+                        }
+
                         # 예측 위치 기준 중복 제한
                         if k > 0 and k - 1 not in used_prediction_positions:
-                            predictions.append(convert(data[k - 1]))
+                            result = convert(data[k - 1])
+                            predictions.append(result)
                             used_prediction_positions.add(k - 1)
+                            match_log["예측값"].append({"위치": "상단(k-1)", "값": result})
+
                         if k + size < len(data) and k + size not in used_prediction_positions:
-                            predictions.append(convert(data[k + size]))
+                            result = convert(data[k + size])
+                            predictions.append(result)
                             used_prediction_positions.add(k + size)
+                            match_log["예측값"].append({"위치": "하단(k+size)", "값": result})
+
+                        debug_logs.append(match_log)
 
         counter = Counter(predictions)
         top3_raw = counter.most_common(3)
@@ -65,7 +80,8 @@ def predict():
 
         return jsonify({
             "예측회차": int(raw_data[0]["date_round"]) + 1,
-            "Top3 예측값": top3
+            "Top3 예측값": top3,
+            "디버깅로그": debug_logs  # 전체 블럭 매칭 및 예측 위치 로그 출력
         })
 
     except Exception as e:
