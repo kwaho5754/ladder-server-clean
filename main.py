@@ -13,29 +13,12 @@ def convert(entry):
     oe = '짝' if entry['odd_even'] == 'EVEN' else '홀'
     return f"{side}{count}{oe}"
 
-def mirror(block):
-    result = []
-    for b in block.split('>'):
-        side = '우' if b[0] == '좌' else '좌'
-        oe = '짝' if b[2] == '홀' else '홀'
-        result.append(f"{side}{b[1]}{oe}")
-    return '>'.join(result)
-
-def make_direction_pattern_block(data, start, size):
-    return '>'.join([
-        '좌' if data[i]['start_point'] == 'LEFT' else '우'
-        for i in range(start, start + size)
-    ])
-
-def make_middle_mirror_block(data, start, size):
-    if size < 3:
-        return None
-    block = [convert(data[i]) for i in range(start, start + size)]
-    mid = size // 2
-    side = '우' if block[mid][0] == '좌' else '좌'
-    oe = '짝' if block[mid][2] == '홀' else '홀'
-    block[mid] = f"{side}{block[mid][1]}{oe}"
-    return '>'.join(block)
+# 비대칭 블럭 여부 확인 (좌↔우, 홀↔짝 전환이 없는 블럭)
+def is_strictly_non_mirrored(block_list):
+    for b in block_list:
+        if ('좌' in b and '우' in b) or ('짝' in b and '홀' in b):
+            return False
+    return True
 
 @app.route("/")
 def index():
@@ -54,32 +37,35 @@ def predict():
 
         data = raw_data[-288:]
         predictions = []
-        latest_blocks = []
+        seen_blocks = set()
 
+        # 최근 블럭 후보들 (원본 반대 + 대칭 반대 기준)
         for size in range(2, 6):
             idx = len(data) - size
-            block = '>'.join([convert(data[i]) for i in range(idx, len(data))])
-            latest_blocks.append(block)
-            latest_blocks.append(mirror(block))
-            latest_blocks.append(make_direction_pattern_block(data, idx, size))
-            mid_block = make_middle_mirror_block(data, idx, size)
-            if mid_block:
-                latest_blocks.append(mid_block)
+            current_block = [convert(data[i]) for i in range(idx, len(data))]
+            current_block_str = '>'.join(current_block)
 
+            if not is_strictly_non_mirrored(current_block):
+                continue  # 대칭 성분이 섞인 블럭은 제외
+
+            seen_blocks.add(current_block_str)
+
+        # 과거에서 매칭되지 않았던 블럭 또는 비대칭 블럭만 기반으로 예측값 추출
         for size in range(2, 6):
             for i in range(len(data) - size):
-                compare_blocks = [
-                    '>'.join([convert(data[j]) for j in range(i, i + size)]),
-                    mirror('>'.join([convert(data[j]) for j in range(i, i + size)])),
-                    make_direction_pattern_block(data, i, size),
-                    make_middle_mirror_block(data, i, size)
-                ]
-                for block in compare_blocks:
-                    if block and block in latest_blocks:
-                        if i > 0:
-                            predictions.append(convert(data[i - 1]))
-                        if i + size < len(data):
-                            predictions.append(convert(data[i + size]))
+                past_block = [convert(data[j]) for j in range(i, i + size)]
+                past_block_str = '>'.join(past_block)
+
+                if not is_strictly_non_mirrored(past_block):
+                    continue  # 대칭 포함된 블럭은 분석 제외
+
+                if past_block_str in seen_blocks:
+                    continue  # 원본과 동일한 블럭은 배제 (원본 반대)
+
+                if i > 0:
+                    predictions.append(convert(data[i - 1]))
+                if i + size < len(data):
+                    predictions.append(convert(data[i + size]))
 
         counter = Counter(predictions)
         top3_raw = counter.most_common(3)
