@@ -13,11 +13,14 @@ def convert(entry):
     oe = '짝' if entry['odd_even'] == 'EVEN' else '홀'
     return f"{side}{count}{oe}"
 
-# 비대칭 블럭인지 확인 (좌↔우, 홀↔짝 섞인 블럭은 False)
-def is_strictly_non_mirrored(block_list):
-    sides = [b[0] for b in block_list]
-    parities = [b[2] for b in block_list]
-    return (all(s == sides[0] for s in sides) and all(p == parities[0] for p in parities))
+# 대칭 변환: 좌↔우, 홀↔짝
+def mirror(block):
+    result = []
+    for b in block.split('>'):
+        side = '우' if b[0] == '좌' else '좌'
+        oe = '홀' if b[2] == '짝' else '짝'
+        result.append(f"{side}{b[1]}{oe}")
+    return '>'.join(result)
 
 @app.route("/")
 def index():
@@ -36,32 +39,23 @@ def predict():
 
         data = raw_data[-288:]
         predictions = []
-        seen_blocks = set()
 
-        # 최근 블럭 (원본 제거용 기준)
+        # 역방향 블럭 생성 (과거 → 미래 방향)
         for size in range(2, 6):
-            idx = len(data) - size
-            block = [convert(data[i]) for i in range(idx, len(data))]
-            if not is_strictly_non_mirrored(block):
-                continue
-            block_str = '>'.join(block)
-            seen_blocks.add(block_str)
-
-        # 과거 블럭 중: 원본과 다르고 비대칭 유지 블럭만 예측
-        for size in range(2, 6):
-            for i in range(len(data) - size):
+            for i in range(len(data) - size - 1):  # 마지막 줄은 예측값이 없으므로 -1
                 block = [convert(data[j]) for j in range(i, i + size)]
                 block_str = '>'.join(block)
+                block_mirror = mirror(block_str)
 
-                if not is_strictly_non_mirrored(block):
-                    continue  # 대칭 포함된 블럭은 제외
-                if block_str in seen_blocks:
-                    continue  # 최근 블럭과 동일한 건 제외
+                # 미래에서 이 블럭이 등장하는지 찾기
+                for k in range(i + 1, len(data) - size):
+                    future_block = [convert(data[j]) for j in range(k, k + size)]
+                    future_block_str = '>'.join(future_block)
 
-                if i > 0:
-                    predictions.append(convert(data[i - 1]))
-                if i + size < len(data):
-                    predictions.append(convert(data[i + size]))
+                    if future_block_str == block_str or future_block_str == block_mirror:
+                        # 일치한 경우 → 해당 블럭의 **다음 줄**을 예측값으로 채택
+                        if k + size < len(data):
+                            predictions.append(convert(data[k + size]))
 
         counter = Counter(predictions)
         top3_raw = counter.most_common(3)
