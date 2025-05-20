@@ -1,9 +1,8 @@
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify
 from flask_cors import CORS
 import requests
-from collections import Counter
 import os
-import random
+from collections import Counter
 
 app = Flask(__name__)
 CORS(app)
@@ -18,82 +17,46 @@ def get_mirror_name(name):
     table = str.maketrans("좌우", "우좌")
     return name.translate(table)
 
-def convert_block_to_str(block):
-    return '>'.join(block)
-
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-@app.route("/predict")
+@app.route("/predict", methods=["GET"])
 def predict():
     try:
         url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers)
+        response = requests.get(url)
         raw_data = response.json()
 
-        if not isinstance(raw_data, list) or len(raw_data) < 10:
-            return jsonify({"error": "데이터 형식 또는 길이 오류"})
+        if not isinstance(raw_data, list):
+            return jsonify({"error": "Invalid data format"})
 
         data = raw_data[-288:]
         predictions = []
-        seen_matches = set()
-        used_prediction_positions = set()
-        used_blocks = set()
-        debug_logs = []
 
-        for size in range(2, 6):  # 2~5줄 고정 블럭
-            for i in range(len(data) - size - 1):
-                base_block = [convert(data[j]) for j in range(i, i + size)]
-                base_block_str = convert_block_to_str(base_block)
+        # 최근 블럭 2~5줄 생성 후 각 블럭/대칭 블럭으로 과거 비교
+        for size in range(2, 6):
+            if len(data) < size:
+                continue
 
-                mirror_block = [get_mirror_name(x) for x in base_block]
-                mirror_block_str = convert_block_to_str(mirror_block)
+            block = [convert(entry) for entry in data[-size:]]
+            block_str = '>'.join(block)
 
-                candidate_blocks = [
-                    ("원본", base_block_str),
-                    ("대칭", mirror_block_str)
-                ]
+            mirror_block = [get_mirror_name(b) for b in block]
+            mirror_block_str = '>'.join(mirror_block)
 
-                for block_type, block_str in candidate_blocks:
-                    if block_str in used_blocks:
-                        continue
-                    used_blocks.add(block_str)
+            for pattern in [block_str, mirror_block_str]:
+                for i in reversed(range(len(data) - size)):
+                    past_block = [convert(entry) for entry in data[i:i + size]]
+                    past_block_str = '>'.join(past_block)
 
-                    for k in range(i + size, len(data) - size):
-                        past_block = [convert(data[j]) for j in range(k, k + size)]
-                        past_block_str = convert_block_to_str(past_block)
+                    if pattern == past_block_str:
+                        if i > 0:
+                            predictions.append(convert(data[i - 1]))  # 상단
+                        if i + size < len(data):
+                            predictions.append(convert(data[i + size]))  # 하단
 
-                        if past_block_str == block_str:
-                            match_key = (block_str, k)
-                            if match_key in seen_matches:
-                                continue
-                            seen_matches.add(match_key)
-
-                            match_log = {
-                                "블럭유형": block_type,
-                                "블럭": block_str,
-                                "현재위치(i)": i,
-                                "매칭위치(k)": k,
-                                "예측값": []
-                            }
-
-                            prediction_candidates = []
-                            if k > 0 and k - 1 not in used_prediction_positions:
-                                prediction_candidates.append(("상단(k-1)", k - 1))
-                            if k + size < len(data) and k + size not in used_prediction_positions:
-                                prediction_candidates.append(("하단(k+size)", k + size))
-
-                            if prediction_candidates:
-                                label, pos = random.choice(prediction_candidates)
-                                result = convert(data[pos])
-                                predictions.append(result)
-                                used_prediction_positions.add(pos)
-                                match_log["예측값"].append({"위치": label, "값": result})
-
-                            debug_logs.append(match_log)
-                            break  # 블럭 1회만 사용
+        if not predictions:
+            return jsonify({
+                "예측회차": int(raw_data[-1]["date_round"]),
+                "Top3 예측값": [{"value": "❌ 없음", "count": 0} for _ in range(3)]
+            })
 
         counter = Counter(predictions)
         top3_raw = counter.most_common(3)
@@ -103,9 +66,8 @@ def predict():
             top3.append({"value": "❌ 없음", "count": 0})
 
         return jsonify({
-            "예측회차": int(raw_data[0]["date_round"]) + 1,
-            "Top3 예측값": top3,
-            "디버깅로그": debug_logs
+            "예측회차": int(raw_data[-1]["date_round"]),
+            "Top3 예측값": top3
         })
 
     except Exception as e:
