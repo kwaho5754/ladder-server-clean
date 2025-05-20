@@ -43,6 +43,7 @@ def predict():
         predictions = []
         seen_matches = set()
         used_prediction_positions = set()
+        used_blocks = set()  # ✅ 블럭당 중복 예측 방지용
         debug_logs = []
 
         for size in range(2, 6):  # 2~5줄 고정 블럭
@@ -63,6 +64,10 @@ def predict():
                 ]
 
                 for block_type, block_str in candidate_blocks:
+                    if block_str in used_blocks:
+                        continue  # ✅ 블럭당 예측값 1회 제한
+                    used_blocks.add(block_str)
+
                     for k in range(i + size, len(data) - size):
                         past_block = [convert(data[j]) for j in range(k, k + size)]
                         past_block_str = convert_block_to_str(past_block)
@@ -96,7 +101,7 @@ def predict():
                                 match_log["예측값"].append({"위치": label, "값": result})
 
                             debug_logs.append(match_log)
-                            break  # 한 번 매칭되면 다음 블럭으로
+                            break  # 매칭된 블럭은 1회만 사용
 
         counter = Counter(predictions)
         top3_raw = counter.most_common(3)
