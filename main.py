@@ -7,14 +7,12 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# 결과를 한글 블럭명으로 변환
 def convert(entry):
     side = '좌' if entry['start_point'] == 'LEFT' else '우'
     count = str(entry['line_count'])
     oe = '짝' if entry['odd_even'] == 'EVEN' else '홀'
     return f"{side}{count}{oe}"
 
-# 대칭 변환
 def mirror(block):
     result = []
     for b in block.split('>'):
@@ -23,14 +21,12 @@ def mirror(block):
         result.append(f"{side}{b[1]}{oe}")
     return '>'.join(result)
 
-# 구조 반복 (좌우 흐름만)
 def make_direction_pattern_block(data, start, size):
     return '>'.join([
         '좌' if data[i]['start_point'] == 'LEFT' else '우'
         for i in range(start, start + size)
     ])
 
-# 중간 대칭 블럭 (중간 줄만 반전)
 def make_middle_mirror_block(data, start, size):
     if size < 3:
         return None
@@ -85,9 +81,12 @@ def predict():
                         if i + size < len(data):
                             predictions.append(convert(data[i + size]))
 
-        top3 = [item for item, _ in Counter(predictions).most_common(3)]
+        counter = Counter(predictions)
+        top3_raw = counter.most_common(3)
+        top3 = [{"value": item, "count": count} for item, count in top3_raw]
+
         while len(top3) < 3:
-            top3.append("❌ 없음")
+            top3.append({"value": "❌ 없음", "count": 0})
 
         return jsonify({
             "예측회차": int(raw_data[0]["date_round"]) + 1,
