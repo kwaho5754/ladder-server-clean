@@ -39,29 +39,28 @@ def predict():
 
         data = raw_data[-288:]
         predictions = []
-        seen_matches = set()  # 블럭-위치 중복 방지
+        seen_matches = set()
 
-        # 역방향 기준 블럭 생성 + 매칭
+        # ✅ 과거부터 최근 방향으로 블럭 생성
         for size in range(2, 6):  # 2~5줄 고정 블럭
             for i in range(len(data) - size - 1):
                 block = [convert(data[j]) for j in range(i, i + size)]
                 block_str = '>'.join(block)
                 block_mirror = mirror(block_str)
 
+                # 미래 방향에서 같은 블럭이 있는지 탐색
                 for k in range(i + 1, len(data) - size):
                     future_block = [convert(data[j]) for j in range(k, k + size)]
                     future_block_str = '>'.join(future_block)
 
-                    # 블럭 or 대칭 블럭이 미래에서 일치할 경우
                     if future_block_str in (block_str, block_mirror):
                         match_key = (block_str, k)
                         if match_key in seen_matches:
-                            continue  # 블럭당 예측 1회 제한
+                            continue
                         seen_matches.add(match_key)
 
                         if k + size < len(data):
-                            predicted = convert(data[k + size])
-                            predictions.append(predicted)
+                            predictions.append(convert(data[k + size]))
 
         counter = Counter(predictions)
         top3_raw = counter.most_common(3)
