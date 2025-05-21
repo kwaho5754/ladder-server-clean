@@ -36,11 +36,19 @@ def weighted_prediction(data, transform_func=None):
             past_block = [convert(entry) for entry in reversed_data[i:i + size]]
             if transform_func:
                 past_block = [transform_func(b) for b in past_block]
+
             if pattern == '>'.join(past_block):
                 if i > 0:
-                    scores[convert(reversed_data[i - 1])] += weights[size]
+                    val = convert(reversed_data[i - 1])
+                    if transform_func:
+                        val = transform_func(val)
+                    scores[val] += weights[size]
+
                 if i + size < len(reversed_data):
-                    scores[convert(reversed_data[i + size])] += weights[size]
+                    val = convert(reversed_data[i + size])
+                    if transform_func:
+                        val = transform_func(val)
+                    scores[val] += weights[size]
     return scores
 
 def top3_from_scores(score_dict):
