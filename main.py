@@ -19,13 +19,6 @@ def get_full_mirror_name(name):
     oe = '홀' if '짝' in name else '짝'
     return f"{side}{count}{oe}"
 
-# 의미 대칭
-def get_structural_mirror(name):
-    side = '우' if '좌' in name else '좌'
-    count = '4' if '3' in name else '3'
-    oe = '홀' if '짝' in name else '짝'
-    return f"{side}{count}{oe}"
-
 def find_prediction_by_blocksize(data, transform_func=None):
     result = {}
     for size in range(2, 6):
@@ -68,8 +61,7 @@ def predict():
         return jsonify({
             "예측회차": round_num,
             "원본": find_prediction_by_blocksize(data),
-            "완전대칭": find_prediction_by_blocksize(data, get_full_mirror_name),
-            "의미대칭": find_prediction_by_blocksize(data, get_structural_mirror)
+            "완전대칭": find_prediction_by_blocksize(data, get_full_mirror_name)
         })
 
     except Exception as e:
