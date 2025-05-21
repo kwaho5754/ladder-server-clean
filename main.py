@@ -22,22 +22,25 @@ def get_full_mirror_name(name):
 def weighted_prediction(data, transform_func=None):
     weights = {2: 0.5, 3: 1.0, 4: 2.0, 5: 3.0}
     scores = defaultdict(float)
+    reversed_data = list(reversed(data))  # 역정렬
 
     for size in range(2, 6):
-        if len(data) < size:
+        if len(reversed_data) < size:
             continue
-        block = [convert(entry) for entry in data[-size:]]
+        block = [convert(entry) for entry in reversed_data[-size:]]
         if transform_func:
             block = [transform_func(b) for b in block]
         pattern = '>'.join(block)
 
-        for i in reversed(range(len(data) - size)):
-            past_block = [convert(entry) for entry in data[i:i + size]]
+        for i in reversed(range(len(reversed_data) - size)):
+            past_block = [convert(entry) for entry in reversed_data[i:i + size]]
+            if transform_func:
+                past_block = [transform_func(b) for b in past_block]
             if pattern == '>'.join(past_block):
                 if i > 0:
-                    scores[convert(data[i - 1])] += weights[size]
-                if i + size < len(data):
-                    scores[convert(data[i + size])] += weights[size]
+                    scores[convert(reversed_data[i - 1])] += weights[size]
+                if i + size < len(reversed_data):
+                    scores[convert(reversed_data[i + size])] += weights[size]
     return scores
 
 def top3_from_scores(score_dict):
@@ -59,13 +62,13 @@ def predict():
         data = raw_data[-288:]
         round_num = int(raw_data[-1]["date_round"])
 
-        origin_scores = weighted_prediction(data)
-        mirror_scores = weighted_prediction(data, transform_func=get_full_mirror_name)
+        reverse_scores = weighted_prediction(data)
+        reverse_mirror_scores = weighted_prediction(data, transform_func=get_full_mirror_name)
 
         return jsonify({
             "예측회차": round_num,
-            "원본 Top3": top3_from_scores(origin_scores),
-            "대칭 Top3": top3_from_scores(mirror_scores)
+            "역정렬 Top3": top3_from_scores(reverse_scores),
+            "역정렬 대칭 Top3": top3_from_scores(reverse_mirror_scores)
         })
 
     except Exception as e:
