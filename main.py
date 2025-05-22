@@ -1,78 +1,112 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import requests
 import os
-from collections import Counter
+from collections import Counter, defaultdict
 
 app = Flask(__name__)
 CORS(app)
 
-# 변환: 데이터 → 블럭 이름
+# --- 블럭 이름 파싱/조합 ---
+def parse_block(block):
+    return block[0], block[1], block[2]  # (시작, 줄수, 홀짝)
+
 def convert(entry):
     side = '좌' if entry['start_point'] == 'LEFT' else '우'
     count = str(entry['line_count'])
     oe = '짝' if entry['odd_even'] == 'EVEN' else '홀'
     return f"{side}{count}{oe}"
 
-# 블럭 변형: 원본 → 유사1~3 (방향, 홀짝, 줄수)
+# --- 대칭 함수들 ---
+def flip_start(s):
+    return '우' if s == '좌' else '좌'
+
+def flip_oe(o):
+    return '짝' if o == '홀' else '홀'
+
+# --- 블럭 구조 변형 ---
 def generate_variants(block):
-    variants = [block]
-    def flip(block):  # 방향 + 홀짝 반전
-        side = '우' if block[0] == '좌' else '좌'
-        count = block[1]
-        oe = '홀' if block[2] == '짝' else '짝'
-        return f"{side}{count}{oe}"
-    def flip_oe(block):
-        return block[:2] + ('홀' if block[2] == '짝' else '짝')
-    def plus_count(block):
-        return block[0] + str(min(int(block[1]) + 1, 5)) + block[2]
-    variants.append(flip(block))
-    variants.append(flip_oe(block))
-    variants.append(plus_count(block))
+    s, c, o = parse_block(block)
+    return {
+        "원본": block,
+        "대칭시작": f"{flip_start(s)}{c}{o}",
+        "대칭홀짝": f"{s}{c}{flip_oe(o)}",
+        "대칭둘다": f"{flip_start(s)}{c}{flip_oe(o)}"
+    }
+
+def generate_variants_for_block(block):
+    variants = {"원본": block, "대칭시작": [], "대칭홀짝": [], "대칭둘다": []}
+    for b in block:
+        s, c, o = parse_block(b)
+        variants["대칭시작"].append(f"{flip_start(s)}{c}{o}")
+        variants["대칭홀짝"].append(f"{s}{c}{flip_oe(o)}")
+        variants["대칭둘다"].append(f"{flip_start(s)}{c}{flip_oe(o)}")
     return variants
 
-# 블럭 매칭 + 상하 예측값 수집
-def predict_from_block(data, size):
-    predictions = []
-    for i in range(len(data) - size):
-        block = [convert(d) for d in data[i:i+size]]
-        variants = [generate_variants(b) for b in block]
-        all_blocks = list(zip(*variants))  # 4개의 블럭 조합 생성
+# --- 블럭 매칭 및 점수 계산 ---
+def match_blocks(data, size):
+    recent = [convert(d) for d in data[-size:]]
+    variants = generate_variants_for_block(recent)
+    all_data = [convert(d) for d in data]
 
-        for variant_block in all_blocks:
-            for j in range(len(data) - size):
-                target = [convert(d) for d in data[j:j+size]]
-                if target == list(variant_block):
-                    if j > 0:
-                        predictions.append(convert(data[j-1]))  # 상단값
-                    if j + size < len(data):
-                        predictions.append(convert(data[j+size]))  # 하단값
-    return predictions
+    scores = defaultdict(lambda: {"score": 0, "detail": defaultdict(int)})
 
-# API
-@app.route("/predict", methods=["GET"])
+    for i in range(len(all_data) - size):
+        past_block = all_data[i:i+size]
+        if past_block == variants['원본']:
+            target = data[i-1] if i > 0 else None
+            if target:
+                val = convert(target)
+                scores[val]["score"] += 3
+                scores[val]["detail"]["원본반복"] += 1
+        if past_block == variants['대칭시작']:
+            target = data[i-1] if i > 0 else None
+            if target:
+                val = convert(target)
+                scores[val]["score"] += 2
+                scores[val]["detail"]["시작대칭"] += 1
+        if past_block == variants['대칭홀짝']:
+            target = data[i-1] if i > 0 else None
+            if target:
+                val = convert(target)
+                scores[val]["score"] += 2
+                scores[val]["detail"]["홀짝대칭"] += 1
+        if past_block == variants['대칭둘다']:
+            target = data[i-1] if i > 0 else None
+            if target:
+                val = convert(target)
+                scores[val]["score"] += 1
+                scores[val]["detail"]["시작+홀짝대칭"] += 1
+
+    return scores
+
+# --- API 엔드포인트 ---
+@app.route("/predict")
 def predict():
     try:
         url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
-        response = requests.get(url)
-        raw_data = response.json()
-        data = raw_data[-288:]
-        round_num = int(raw_data[-1]['date_round']) + 1
+        raw = requests.get(url).json()
+        data = raw[-288:]
+        round_num = int(raw[-1]['date_round']) + 1
 
-        all_preds = []
-        for size in range(2, 6):
-            all_preds += predict_from_block(data, size)
+        all_scores = defaultdict(lambda: {"score": 0, "detail": defaultdict(int)})
+        for size in range(3, 8):  # 3~7줄 블럭
+            scores = match_blocks(data, size)
+            for key, val in scores.items():
+                all_scores[key]["score"] += val["score"]
+                for k, v in val["detail"].items():
+                    all_scores[key]["detail"][k] += v
 
-        counter = Counter(all_preds)
-        result = [item for item, _ in counter.most_common(9)]
+        sorted_result = sorted(all_scores.items(), key=lambda x: x[1]['score'], reverse=True)
+        top3 = []
+        for i in range(3):
+            if i < len(sorted_result):
+                name, info = sorted_result[i]
+                top3.append({"값": name, "점수": info["score"], "근거": dict(info["detail"])})
+            else:
+                top3.append({"값": "❌ 없음", "점수": 0, "근거": {}})
 
-        while len(result) < 9:
-            result.append("❌ 없음")
-
-        return jsonify({
-            "예측회차": round_num,
-            "예측값": result
-        })
+        return jsonify({"예측회차": round_num, "Top3": top3})
 
     except Exception as e:
         return jsonify({"error": str(e)})
