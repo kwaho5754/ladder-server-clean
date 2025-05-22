@@ -26,9 +26,8 @@ def analyze_block(data, target_index):
 
 def top1(score_dict):
     if not score_dict:
-        return [{"value": "❌ 없음", "score": 0}]
-    sorted_items = sorted(score_dict.items(), key=lambda x: -x[1])
-    return [{"value": k, "score": v} for k, v in sorted_items[:1]]
+        return "❌ 없음"
+    return max(score_dict.items(), key=lambda x: x[1])[0]
 
 @app.route("/predict", methods=["GET"])
 def predict():
@@ -40,28 +39,18 @@ def predict():
             return jsonify({"error": "Invalid data format"})
 
         data = raw_data[-288:]
-        round_num = int(raw_data[-1]["date_round"])
+        round_num = int(raw_data[-1]["date_round"]) + 1
 
-        A = data[-96:]      # 최근
-        B = data[-192:-96]  # 중간
-        C = data[:-192]     # 과거
+        start = top1(analyze_block(data, 0))  # 시작방향
+        count = top1(analyze_block(data, 1))  # 줄수
+        oe = top1(analyze_block(data, 2))     # 홀짝
 
         result = {
             "예측회차": round_num,
-            "시작방향": {
-                "최근": top1(analyze_block(A, 0)),
-                "중간": top1(analyze_block(B, 0)),
-                "과거": top1(analyze_block(C, 0))
-            },
-            "줄수": {
-                "최근": top1(analyze_block(A, 1)),
-                "중간": top1(analyze_block(B, 1)),
-                "과거": top1(analyze_block(C, 1))
-            },
-            "홀짝": {
-                "최근": top1(analyze_block(A, 2)),
-                "중간": top1(analyze_block(B, 2)),
-                "과거": top1(analyze_block(C, 2))
+            "예측값": {
+                "시작방향": start,
+                "줄수": count,
+                "홀짝": oe
             }
         }
 
