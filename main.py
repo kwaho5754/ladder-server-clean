@@ -20,14 +20,12 @@ def calculate_score(value, recent_list, total_list, block_sequence):
     score = 0.0
     reasons = []
 
-    # 빈도 점수
     recent_count = recent_list.count(value)
     total_count = total_list.count(value)
     freq_score = recent_count * 1.0 + (total_count / 10.0) * 0.5
     score += freq_score
     reasons.append(f"빈도 점수: {freq_score}점 (최근 {recent_count}회, 전체 {total_count}회)")
 
-    # 블럭 반복 보정 (과거 블럭에서 다음 줄 값이 예측값과 같을 경우)
     block_matches = 0
     for i in range(len(block_sequence) - 4):
         if block_sequence[i:i+3] == block_sequence[-3:]:
@@ -38,20 +36,18 @@ def calculate_score(value, recent_list, total_list, block_sequence):
         score += block_score
         reasons.append(f"블럭 반복 보정: +{block_score}점 ({block_matches}회 적중)")
 
-    # 밸런스 반등 보정
     counter = Counter(recent_list)
-    if value in ['좌', '우'] and counter:
+    if value in ['좌', '우']:
         opp = '우' if value == '좌' else '좌'
         if counter[opp] >= 16:
             score += 1.5
             reasons.append(f"밸런스 보정: {opp} 편향 → {value} +1.5점")
-    if value in ['홀', '짝'] and counter:
+    if value in ['홀', '짝']:
         opp = '짝' if value == '홀' else '홀'
         if counter[opp] >= 16:
             score += 1.5
             reasons.append(f"밸런스 보정: {opp} 편향 → {value} +1.5점")
 
-    # 연속 반복 감점
     max_streak = 0
     current_streak = 0
     for v in recent_list:
@@ -73,10 +69,12 @@ def calculate_score(value, recent_list, total_list, block_sequence):
     }
 
 def predict_element(data, index):
-    recent = data[-20:]
+    # ✅ 전체 데이터를 반전 (역방향: 과거 → 최근 순서)
+    reversed_data = list(reversed(data))
+    recent = reversed_data[:20]  # 최신 20줄 (실제로는 data[-1]부터 20개)
     recent_values = [split_components(convert(d))[index] for d in recent]
-    total_values = [split_components(convert(d))[index] for d in data]
-    block_sequence = [split_components(convert(d))[index] for d in data]
+    total_values = [split_components(convert(d))[index] for d in reversed_data]
+    block_sequence = [split_components(convert(d))[index] for d in reversed_data]
 
     candidates = list(set(total_values))
     scored = [calculate_score(v, recent_values, total_values, block_sequence) for v in candidates]
