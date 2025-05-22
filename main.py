@@ -16,34 +16,19 @@ def convert(entry):
 def split_components(name):
     return name[0], name[1], name[2]
 
-def analyze_by_element(data, target_index):
-    weights = {3: 1.0, 4: 1.5, 5: 2.0, 6: 2.5, 7: 3.0}
-    scores = defaultdict(float)
+def analyze_block(data, target_index):
+    counts = defaultdict(int)
+    for entry in data:
+        side, count, oe = split_components(convert(entry))
+        key = (side, count, oe)[target_index]
+        counts[key] += 1
+    return counts
 
-    components = [split_components(convert(entry)) for entry in data]
-
-    for size in range(3, 8):
-        if len(components) < size:
-            continue
-        recent_block = components[-size:]
-        recent_pattern = [elem[target_index] for elem in recent_block]
-
-        for i in range(len(components) - size):
-            past_block = components[i:i + size]
-            past_pattern = [elem[target_index] for elem in past_block]
-            if recent_pattern == past_pattern:
-                weight = weights[size]
-                if i > 0:
-                    val = components[i - 1][target_index]
-                    scores[val] += weight / 2
-                if i + size < len(components):
-                    val = components[i + size][target_index]
-                    scores[val] += weight / 2
-    return scores
-
-def top_elements(score_dict):
+def top1(score_dict):
+    if not score_dict:
+        return [{"value": "❌ 없음", "score": 0}]
     sorted_items = sorted(score_dict.items(), key=lambda x: -x[1])
-    return [{"value": k, "score": round(v, 2)} for k, v in sorted_items[:3]]
+    return [{"value": k, "score": v} for k, v in sorted_items[:1]]
 
 @app.route("/predict", methods=["GET"])
 def predict():
@@ -57,11 +42,27 @@ def predict():
         data = raw_data[-288:]
         round_num = int(raw_data[-1]["date_round"])
 
+        A = data[-96:]      # 최근
+        B = data[-192:-96]  # 중간
+        C = data[:-192]     # 과거
+
         result = {
             "예측회차": round_num,
-            "시작방향": top_elements(analyze_by_element(data, 0)),
-            "줄수": top_elements(analyze_by_element(data, 1)),
-            "홀짝": top_elements(analyze_by_element(data, 2))
+            "시작방향": {
+                "최근": top1(analyze_block(A, 0)),
+                "중간": top1(analyze_block(B, 0)),
+                "과거": top1(analyze_block(C, 0))
+            },
+            "줄수": {
+                "최근": top1(analyze_block(A, 1)),
+                "중간": top1(analyze_block(B, 1)),
+                "과거": top1(analyze_block(C, 1))
+            },
+            "홀짝": {
+                "최근": top1(analyze_block(A, 2)),
+                "중간": top1(analyze_block(B, 2)),
+                "과거": top1(analyze_block(C, 2))
+            }
         }
 
         return jsonify(result)
