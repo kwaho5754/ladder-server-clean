@@ -2,7 +2,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 import requests
 import os
-from collections import defaultdict, Counter
+from collections import defaultdict
 
 app = Flask(__name__)
 CORS(app)
@@ -21,7 +21,7 @@ def mirror_component(c, mode):
         return '우' if c == '좌' else '좌'
     elif mode == 'oe':
         return '짝' if c == '홀' else '홀'
-    return c  # 줄 수는 그대로
+    return c
 
 def analyze_component_blocks(data, mode, apply_mirror=False):
     weights = {3: 1.0, 4: 1.5, 5: 2.0, 6: 2.5, 7: 3.0}
@@ -31,8 +31,8 @@ def analyze_component_blocks(data, mode, apply_mirror=False):
     for entry in data:
         full = convert(entry)
         side, count, oe = split_components(full)
-        val = side if mode == 'side' else count if mode == 'count' else oe
-        if apply_mirror and mode != 'count':
+        val = side if mode == 'side' else oe
+        if apply_mirror:
             val = mirror_component(val, mode)
         components.append(val)
 
@@ -48,9 +48,13 @@ def analyze_component_blocks(data, mode, apply_mirror=False):
                 weight = weights[size]
                 if i > 0:
                     val = components[i-1]
+                    if apply_mirror:
+                        val = mirror_component(val, mode)
                     scores[val] += weight / 2
                 if i + size < len(components):
                     val = components[i+size]
+                    if apply_mirror:
+                        val = mirror_component(val, mode)
                     scores[val] += weight / 2
 
     return scores
@@ -75,7 +79,6 @@ def predict():
             "예측회차": round_num,
             "시작방향 원본": top_elements(analyze_component_blocks(data, 'side', apply_mirror=False)),
             "시작방향 대칭": top_elements(analyze_component_blocks(data, 'side', apply_mirror=True)),
-            "줄수": top_elements(analyze_component_blocks(data, 'count', apply_mirror=False)),
             "홀짝 원본": top_elements(analyze_component_blocks(data, 'oe', apply_mirror=False)),
             "홀짝 대칭": top_elements(analyze_component_blocks(data, 'oe', apply_mirror=True))
         }
