@@ -69,9 +69,8 @@ def calculate_score(value, recent_list, total_list, block_sequence):
     }
 
 def predict_element(data, index):
-    # ✅ 전체 데이터를 반전 (역방향: 과거 → 최근 순서)
-    reversed_data = list(reversed(data))
-    recent = reversed_data[:20]  # 최신 20줄 (실제로는 data[-1]부터 20개)
+    reversed_data = list(reversed(data))  # ✅ 역방향: 과거 → 최근
+    recent = reversed_data[-20:]          # ✅ 과거 기준 recent (가장 오래된 쪽 20줄)
     recent_values = [split_components(convert(d))[index] for d in recent]
     total_values = [split_components(convert(d))[index] for d in reversed_data]
     block_sequence = [split_components(convert(d))[index] for d in reversed_data]
