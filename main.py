@@ -16,18 +16,31 @@ def convert(entry):
 def split_components(name):
     return name[0], name[1], name[2]
 
-def analyze_block(data, target_index):
-    counts = defaultdict(int)
-    for entry in data:
-        side, count, oe = split_components(convert(entry))
-        key = (side, count, oe)[target_index]
-        counts[key] += 1
-    return counts
+def score_by_element(data, recent_len, index):
+    total_counts = defaultdict(int)
+    recent_counts = defaultdict(int)
 
-def top1(score_dict):
-    if not score_dict:
-        return "❌ 없음"
-    return max(score_dict.items(), key=lambda x: x[1])[0]
+    components = [split_components(convert(d)) for d in data]
+    for i, comp in enumerate(components):
+        key = comp[index]
+        total_counts[key] += 1
+        if i >= len(components) - recent_len:
+            recent_counts[key] += 1
+
+    all_keys = set(total_counts.keys()).union(set(recent_counts.keys()))
+    scored = []
+    for key in all_keys:
+        recent = recent_counts[key]
+        total = total_counts[key]
+        score = round(recent * 1.0 + (total / 10) * 0.5, 2)
+        scored.append({
+            "value": key,
+            "recent": recent,
+            "total": total,
+            "score": score
+        })
+    top = sorted(scored, key=lambda x: -x["score"])
+    return top[0]
 
 @app.route("/predict", methods=["GET"])
 def predict():
@@ -41,16 +54,12 @@ def predict():
         data = raw_data[-288:]
         round_num = int(raw_data[-1]["date_round"]) + 1
 
-        start = top1(analyze_block(data, 0))  # 시작방향
-        count = top1(analyze_block(data, 1))  # 줄수
-        oe = top1(analyze_block(data, 2))     # 홀짝
-
         result = {
             "예측회차": round_num,
             "예측값": {
-                "시작방향": start,
-                "줄수": count,
-                "홀짝": oe
+                "시작방향": score_by_element(data, 20, 0),
+                "줄수": score_by_element(data, 20, 1),
+                "홀짝": score_by_element(data, 20, 2)
             }
         }
 
