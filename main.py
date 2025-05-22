@@ -2,106 +2,81 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 import requests
 import os
-from collections import defaultdict, Counter
+from collections import Counter
 
 app = Flask(__name__)
 CORS(app)
 
+# 변환: 데이터 → 블럭 이름
 def convert(entry):
     side = '좌' if entry['start_point'] == 'LEFT' else '우'
     count = str(entry['line_count'])
     oe = '짝' if entry['odd_even'] == 'EVEN' else '홀'
     return f"{side}{count}{oe}"
 
-def split_components(name):
-    return name[0], name[1], name[2]
+# 블럭 변형: 원본 → 유사1~3 (방향, 홀짝, 줄수)
+def generate_variants(block):
+    variants = [block]
+    def flip(block):  # 방향 + 홀짝 반전
+        side = '우' if block[0] == '좌' else '좌'
+        count = block[1]
+        oe = '홀' if block[2] == '짝' else '짝'
+        return f"{side}{count}{oe}"
+    def flip_oe(block):
+        return block[:2] + ('홀' if block[2] == '짝' else '짝')
+    def plus_count(block):
+        return block[0] + str(min(int(block[1]) + 1, 5)) + block[2]
+    variants.append(flip(block))
+    variants.append(flip_oe(block))
+    variants.append(plus_count(block))
+    return variants
 
-def calculate_score(value, recent_list, total_list, block_sequence):
-    score = 0.0
-    reasons = []
+# 블럭 매칭 + 상하 예측값 수집
+def predict_from_block(data, size):
+    predictions = []
+    for i in range(len(data) - size):
+        block = [convert(d) for d in data[i:i+size]]
+        variants = [generate_variants(b) for b in block]
+        all_blocks = list(zip(*variants))  # 4개의 블럭 조합 생성
 
-    recent_count = recent_list.count(value)
-    total_count = total_list.count(value)
-    freq_score = recent_count * 1.0 + (total_count / 10.0) * 0.5
-    score += freq_score
-    reasons.append(f"빈도 점수: {freq_score}점 (최근 {recent_count}회, 전체 {total_count}회)")
+        for variant_block in all_blocks:
+            for j in range(len(data) - size):
+                target = [convert(d) for d in data[j:j+size]]
+                if target == list(variant_block):
+                    if j > 0:
+                        predictions.append(convert(data[j-1]))  # 상단값
+                    if j + size < len(data):
+                        predictions.append(convert(data[j+size]))  # 하단값
+    return predictions
 
-    block_matches = 0
-    for i in range(len(block_sequence) - 4):
-        if block_sequence[i:i+3] == block_sequence[-3:]:
-            if i + 3 < len(block_sequence) and block_sequence[i+3] == value:
-                block_matches += 1
-    if block_matches > 0:
-        block_score = block_matches * 1.0
-        score += block_score
-        reasons.append(f"블럭 반복 보정: +{block_score}점 ({block_matches}회 적중)")
-
-    counter = Counter(recent_list)
-    if value in ['좌', '우']:
-        opp = '우' if value == '좌' else '좌'
-        if counter[opp] >= 16:
-            score += 1.5
-            reasons.append(f"밸런스 보정: {opp} 편향 → {value} +1.5점")
-    if value in ['홀', '짝']:
-        opp = '짝' if value == '홀' else '홀'
-        if counter[opp] >= 16:
-            score += 1.5
-            reasons.append(f"밸런스 보정: {opp} 편향 → {value} +1.5점")
-
-    max_streak = 0
-    current_streak = 0
-    for v in recent_list:
-        if v == value:
-            current_streak += 1
-            max_streak = max(max_streak, current_streak)
-        else:
-            current_streak = 0
-    if max_streak >= 5:
-        score -= 1.0
-        reasons.append(f"연속 반복 감점: {max_streak}회 연속 → -1.0점")
-
-    return {
-        "value": value,
-        "score": round(score, 2),
-        "recent": recent_count,
-        "total": total_count,
-        "reasons": reasons
-    }
-
-def predict_element(data, index):
-    reversed_data = list(reversed(data))  # ✅ 역방향: 과거 → 최근
-    recent = reversed_data[-20:]          # ✅ 과거 기준 recent (가장 오래된 쪽 20줄)
-    recent_values = [split_components(convert(d))[index] for d in recent]
-    total_values = [split_components(convert(d))[index] for d in reversed_data]
-    block_sequence = [split_components(convert(d))[index] for d in reversed_data]
-
-    candidates = list(set(total_values))
-    scored = [calculate_score(v, recent_values, total_values, block_sequence) for v in candidates]
-    return max(scored, key=lambda x: x['score'])
-
+# API
 @app.route("/predict", methods=["GET"])
 def predict():
     try:
         url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
         response = requests.get(url)
         raw_data = response.json()
-
         data = raw_data[-288:]
-        round_num = int(raw_data[-1]["date_round"]) + 1
+        round_num = int(raw_data[-1]['date_round']) + 1
 
-        result = {
+        all_preds = []
+        for size in range(2, 6):
+            all_preds += predict_from_block(data, size)
+
+        counter = Counter(all_preds)
+        result = [item for item, _ in counter.most_common(9)]
+
+        while len(result) < 9:
+            result.append("❌ 없음")
+
+        return jsonify({
             "예측회차": round_num,
-            "예측값": {
-                "시작방향": predict_element(data, 0),
-                "줄수": predict_element(data, 1),
-                "홀짝": predict_element(data, 2)
-            }
-        }
-        return jsonify(result)
+            "예측값": result
+        })
 
     except Exception as e:
         return jsonify({"error": str(e)})
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host='0.0.0.0', port=port)
