@@ -20,35 +20,29 @@ def get_full_mirror_name(name):
     return f"{side}{count}{oe}"
 
 def weighted_prediction(data, transform_func=None):
-    weights = {2: 0.5, 3: 1.0, 4: 2.0, 5: 3.0}
+    weights = {3: 1.0, 4: 1.5, 5: 2.0, 6: 2.5, 7: 3.0}
     scores = defaultdict(float)
-    reversed_data = list(reversed(data))  # 역정렬
 
-    for size in range(2, 6):
-        if len(reversed_data) < size:
+    converted_data = [convert(entry) for entry in data]
+    if transform_func:
+        converted_data = [transform_func(name) for name in converted_data]
+
+    for size in range(3, 8):
+        if len(converted_data) < size:
             continue
-        block = [convert(entry) for entry in reversed_data[-size:]]
-        if transform_func:
-            block = [transform_func(b) for b in block]
-        pattern = '>'.join(block)
+        recent_block = converted_data[-size:]
+        pattern = '>'.join(recent_block)
 
-        for i in reversed(range(len(reversed_data) - size)):
-            past_block = [convert(entry) for entry in reversed_data[i:i + size]]
-            if transform_func:
-                past_block = [transform_func(b) for b in past_block]
-
+        for i in range(len(converted_data) - size):
+            past_block = converted_data[i:i + size]
             if pattern == '>'.join(past_block):
+                weight = weights[size]
                 if i > 0:
-                    val = convert(reversed_data[i - 1])
-                    if transform_func:
-                        val = transform_func(val)
-                    scores[val] += weights[size]
-
-                if i + size < len(reversed_data):
-                    val = convert(reversed_data[i + size])
-                    if transform_func:
-                        val = transform_func(val)
-                    scores[val] += weights[size]
+                    val = converted_data[i - 1]
+                    scores[val] += weight / 2
+                if i + size < len(converted_data):
+                    val = converted_data[i + size]
+                    scores[val] += weight / 2
     return scores
 
 def top3_from_scores(score_dict):
@@ -70,13 +64,13 @@ def predict():
         data = raw_data[-288:]
         round_num = int(raw_data[-1]["date_round"])
 
-        reverse_scores = weighted_prediction(data)
-        reverse_mirror_scores = weighted_prediction(data, transform_func=get_full_mirror_name)
+        forward_scores = weighted_prediction(data)
+        forward_mirror_scores = weighted_prediction(data, transform_func=get_full_mirror_name)
 
         return jsonify({
             "예측회차": round_num,
-            "역정렬 Top3": top3_from_scores(reverse_scores),
-            "역정렬 대칭 Top3": top3_from_scores(reverse_mirror_scores)
+            "정방향 Top3": top3_from_scores(forward_scores),
+            "정방향 대칭 Top3": top3_from_scores(forward_mirror_scores)
         })
 
     except Exception as e:
