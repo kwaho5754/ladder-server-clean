@@ -21,7 +21,7 @@ def predict():
         url = "https://ntry.com/data/json/games/power_ladder/recent_result.json"
         raw = requests.get(url).json()
         data = raw[-288:]
-        round_num = int(raw[-1]['date_round']) + 1
+        round_num = int(raw[0]['date_round']) + 1
 
         recent_block = [convert(d) for d in data[-4:]]  # 최근 4줄 블럭
         all_blocks = [convert(d) for d in data]
